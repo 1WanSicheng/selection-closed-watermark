@@ -602,8 +602,93 @@ $38.2$ vs.\ $37.7$), with threshold inflation $\le2.9$.
 \end{remark}
 
 \section{Experimental Details}\label{app:exp}
-% TODO: exact configs, seeds, hardware; additional tables (per-N sweep, diversity,
-% FPR calibration table; strict-shared prefix statistics; softened-variant
-% correlation measurements).
+
+\subsection{Configuration}
+Generator: LLaMA-3.1-8B-Instruct (fp16, single A100-40GB per arm); prompts: $128$
+from Anthropic HH-RLHF (test split), raw format; $N{=}16$ candidates per prompt,
+nucleus sampling $p{=}0.95$, temperature $1.0$, generation length $200$ tokens.
+Watermark: Gumbel/Aaronson with context hash over the preceding $h{=}4$ tokens
+(hash chain $s\!\leftarrow\!(s\cdot\texttt{salt}+\mathrm{token})\bmod(2^{64}{-}1)$,
+master seed $42$); the subkey arm appends a domain-separation step
+$s\!\leftarrow\!(s\cdot\texttt{salt}+c_0+i)\bmod(2^{64}{-}1)$ with candidate index
+$i$. Reward: ArmoRM-Llama3-8B-v0.1. Detection: per-key score
+$\sum_t\log\frac{1}{1-r_{x_t}}$ with exact $\Gamma(n,1)$ null; union arm reports
+$\min(1,N\cdot\min_i p_i)$. Selection heads: hard-BoN ($\arg\max$ reward),
+soft-/Exp-BoN ($\arg\max$ of $r/\lambda$ plus Gumbel/exponential noise,
+$\lambda{=}0.02$). BoN at $N<16$ uses repeated subsampling of the $16$ generated
+candidates ($60$--$80$ resamples per prompt). Wall-clock: generation
+$\approx13.5$\,min per arm ($128\times16$ candidates, one GPU); union detection is
+$N$ single-key passes (embarrassingly parallel), $\approx4.5$\,min for
+$2048$ texts at $N{=}16$ on one GPU.
+
+\subsection{Full metric suite}
+Table~\ref{tab:suite} reports the complete detection suite for the selected
+output (hard-BoN, $N{=}16$) and for single samples: median $z$, TPR at nominal
+$p<0.05/0.01$, the matched detector's FPR on unwatermarked text, AUROC, F1 at
+$p<0.05$, the length-normalized ANLPPT ($-\ln p$ per token), and median
+perplexity under the generating model. Notes: (i) the union detector's
+Bonferroni correction is conservative --- its realized FPR is $0.039/0.008$ at
+nominal $0.05/0.01$ --- so at fixed \emph{nominal} thresholds the subkey arm's
+TPR is slightly below the softened baseline despite a higher median $z$; at
+matched \emph{realized} FPR the comparison tilts further toward the subkey arm.
+(ii) The strict decoder embeds a visibly stronger per-token signal than the
+softened sampler (single-sample ANLPPT $0.255$ vs.\ $0.201$), which survives
+selection ($0.154$ vs.\ $0.137$). (iii) Perplexity is preserved throughout
+(subkey $3.9/3.5$ vs.\ unwatermarked $3.8/3.3$, single/BoN).
+
+\begin{table}[h]
+\caption{Full metric suite (LLaMA-3.1-8B-Instruct; selected $=$ hard-BoN
+$N{=}16$; thresholds at nominal $p$). PPL is median perplexity under the
+generating model; unwatermarked reference PPL is $3.8$ (single) / $3.3$ (BoN).}
+\label{tab:suite}
+\begin{center}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llccccccccc}
+\toprule
+Arm & Mode & Reward & Med.\ $z$ & TPR$_{.05}$ & TPR$_{.01}$ & FPR$_{.05}$ & FPR$_{.01}$ & AUROC & ANLPPT & PPL \\
+\midrule
+Softened & single & $0.0697$ & $7.09$ & $0.969$ & $0.944$ & $0.061$ & $0.016$ & $0.992$ & $0.201$ & $4.2$ \\
+         & selected & $0.0852$ & $5.62$ & $0.956$ & $0.909$ & $0.062$ & $0.016$ & $0.986$ & $0.137$ & $3.7$ \\
+\midrule
+Strict shared & single & $0.0693$ & $8.00$ & $0.953$ & $0.945$ & $0.061$ & $0.016$ & $0.986$ & $0.255$ & $3.7$ \\
+              & selected & $0.0693$ & $8.00$ & $0.953$ & $0.945$ & $0.062$ & $0.016$ & $0.986$ & $0.255$ & $3.7$ \\
+\midrule
+Strict subkey & single & $0.0698$ & $7.71$ & $0.948$ & $0.926$ & $0.062$ & $0.013$ & $0.982$ & $0.222$ & $3.9$ \\
+(union) & selected & $0.0861$ & $6.50$ & $0.930$ & $0.891$ & $0.039$ & $0.008$ & $0.973$ & $0.154$ & $3.5$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+\subsection{Candidate diversity}
+Within-prompt statistics over the $16$ candidates (pairwise over the first $8$):
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+Arm & Unique fraction & $3$-gram Jaccard & Shared word-prefix \\
+\midrule
+Unwatermarked & $1.00$ & $0.039$ & $1.09$ \\
+Strict subkey (ours) & $1.00$ & $0.038$ & $1.10$ \\
+Softened shared key & $1.00$ & $0.037$ & $2.45$ \\
+Strict shared key & $0.06$ & $1.000$ & $154.3$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The subkey arm matches unwatermarked sampling on all three statistics; the
+softened workaround retains a $2.2\times$ residual prefix correlation (candidates
+start identically until the multinomial happens to diverge, then decorrelate);
+the strict shared key shares the entire generation.
+
+\subsection{Calibration}
+Union detector on unwatermarked text ($128$ prompts $\times16$ candidates):
+realized FPR $0.055/0.012$ at nominal $0.05/0.01$ before Bonferroni tightening
+of the selected-output evaluation ($0.039/0.008$, Table~\ref{tab:suite});
+subkey-generated text scored under the \emph{base} key is null
+($0.057$ at the $0.05$ level), confirming cryptographic separation of the
+derived streams.
 
 \end{document}
