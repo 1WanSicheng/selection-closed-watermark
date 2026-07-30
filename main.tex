@@ -378,9 +378,42 @@ reward ($0.0861$ vs.\ $0.0852$), stronger on post-BoN detection ($z$ $6.50$ vs.\
 $5.62$; strict argmax embeds a stronger per-text signal and union loses almost
 nothing), and strictly distortion-free where softening is not.
 
-% TODO: shift-vs-N real curve (N=2,4,8,16) as the real-data companion of Fig 1.
-% TODO: second model / second watermark family for generality.
-% TODO: wall-clock and diversity metrics per reviewer checklist.
+\textbf{Selection shift vs.\ $N$ (real model).}
+Figure~\ref{fig:realshift} is the real-data companion of Figure~\ref{fig:toy}:
+subsampling $N\in\{1,\dots,16\}$ candidates and selecting by reward, the strict
+shared key's gap to unwatermarked BoN grows from $0.0010$ to $0.0155$ ---
+selection converts the joint degeneracy into a first-order, $N$-increasing bias
+of the released output --- while the subkey arm stays at zero (slightly negative:
+the variance bonus). The right panel tracks the watermark after selection: the
+subkey arm's union $z$ exceeds the softened baseline at \emph{every} $N$.
+
+\textbf{Candidate diversity.}
+Within-prompt statistics confirm closure at the sample level: the subkey arm is
+statistically indistinguishable from unwatermarked sampling
+(unique fraction $1.00$ vs.\ $1.00$, $3$-gram Jaccard $0.038$ vs.\ $0.039$,
+shared word-prefix $1.10$ vs.\ $1.09$), the strict shared key is degenerate
+(unique $0.06$, Jaccard $1.00$, shared prefix $154$ words --- the entire
+generation), and the softened workaround retains a residual $2.2\times$ prefix
+correlation ($2.45$ vs.\ $1.09$ words): softening decorrelates incompletely
+\emph{and} sacrifices strict distortion-freeness.
+
+\begin{figure}[t]
+\begin{center}
+\includegraphics[width=0.98\linewidth]{figures/real_shift_vs_N.pdf}
+\end{center}
+\caption{Real-model selection shift (LLaMA-3.1-8B-Instruct, hard-BoN over
+subsampled candidates). \emph{Left:} reward gap of the selected output to
+unwatermarked BoN at the same $N$. The strict shared key's shift grows with $N$
+(to $0.0155$, the entire BoN gain), mirroring Figure~\ref{fig:toy}; subkeys track
+the ceiling (gap $\le 0$). \emph{Right:} median detection $z$ of the selected
+output; the subkey arm (union detection) stays above the softened workaround at
+every $N$. The shared key's flat $z=8.0$ reflects that its ``selection'' returns
+the same single sample.}
+\label{fig:realshift}
+\end{figure}
+
+% TODO: full detection-metric suite table (TPR/FPR/AUROC/F1/ANLPPT) + PPL — appendix B.
+% TODO: second model pair for generality.
 
 \section{Discussion}\label{sec:discussion}
 \textbf{Security.} Multiple keys trade off against stealing/removal attacks
