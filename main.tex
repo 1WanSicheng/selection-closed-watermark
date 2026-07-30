@@ -248,7 +248,7 @@ not imply this for any $N\ge 2$.
 $Y_S$ is a measurable functional of the candidate tuple and independent auxiliary
 randomness; equal (indistinguishable) joint laws have equal (indistinguishable)
 pushforwards. The converse failure is witnessed by \S\ref{sec:toy}: exact marginals,
-correlated joints, biased selection. \qed
+correlated joints, biased selection.
 \end{proof}
 
 \begin{proposition}[Hierarchy]\label{prop:hierarchy}
@@ -303,9 +303,9 @@ The penalty is paid \emph{per token} and does not vanish with sequence length:
 the two detectors are separated by a per-sequence $\sqrt{2\ln N}$ versus a
 per-token $\ln N$. Figure~\ref{fig:detectors} confirms the analysis: the union
 detector coincides with the correct-subkey oracle at every $N$, while the
-aggregate decays exactly along Eq.~\eqref{eq:aggsignal} in the high-entropy
+aggregate decays exactly along \eqref{eq:aggsignal} in the high-entropy
 regime (machine-precision agreement) and collapses in the low-entropy regime,
-where Eq.~\eqref{eq:aggsignal} is a conservative bound. The aggregate remains the
+where \eqref{eq:aggsignal} is a conservative bound. The aggregate remains the
 right fallback when $N$ is unknown or unbounded, or when the released output is
 composed from multiple candidates block-wise and union enumeration is
 combinatorial.
@@ -319,7 +319,7 @@ combinatorial.
 coincides with the correct-subkey oracle (gray, hidden underneath) at every $N$;
 its only cost is the $\sqrt{2\ln N}$ threshold (dash-dotted, bottom). The
 aggregate detector (red) pays the per-token contraction of
-Eq.~\eqref{eq:aggsignal} (dotted: closed form) --- exact in the high-entropy
+\eqref{eq:aggsignal} (dotted: closed form) --- exact in the high-entropy
 regime, a conservative bound in the low-entropy regime --- and collapses as
 $N$ grows.}
 \label{fig:detectors}
@@ -491,7 +491,7 @@ unwatermarked text, scores are i.i.d.\ $\mathrm{Gumbel}(0,1)$, independent
 across subkeys. For uniform logits over a nucleus of size $V$ the model is exact
 with $\Delta=\ln V$ (the winning token's noise is the maximum of $V$ i.i.d.\
 Gumbels, i.e., $\mathrm{Gumbel}(\ln V,1)$); for peaked distributions it is an
-approximation, and Eq.~\eqref{eq:aggsignal} becomes a conservative bound
+approximation, and \eqref{eq:aggsignal} becomes a conservative bound
 (Remark~\ref{rem:validation}). Throughout, $\gamma$ is Euler's constant,
 $\sigma_g^2=\pi^2/6$, and $T$ is the number of scored tokens.
 
