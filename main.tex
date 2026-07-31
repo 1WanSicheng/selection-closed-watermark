@@ -47,8 +47,9 @@ for a prompt are generated from the same pseudorandom stream and collapse to $N$
 identical copies, so BoN forfeits its entire alignment gain; the practical workaround
 --- softening the sampler --- restores diversity but sacrifices the distortion-free
 property that motivated the scheme. We formalize \emph{$N$-selection-closed}
-distortion-freeness, prove that marginal preservation is insufficient while joint
-preservation is sufficient for \emph{any} selection operator, and give a
+distortion-freeness and prove that joint preservation is \emph{necessary and
+sufficient} for closure under every selection operator --- marginal
+preservation alone controls nothing --- and give a
 \emph{general lifting}, not another watermarking algorithm: the jointly-coupled
 transform $\mathrm{JC}_N$ compiles \emph{any} keyed watermarking scheme into a
 selection-closed one by domain-separated per-candidate subkeys under a single
@@ -85,7 +86,8 @@ context, so they read the same noise and make the same argmax choice --- and ide
 prefixes are a fixed point of the dynamics, so the candidates remain identical
 forever: generation is a deterministic function of (key, prompt), and no step ever
 creates a first divergence. On LLaMA-3.1-8B-Instruct we observe exactly $1/16$
-unique candidates per prompt. Selection then has nothing to select from: every
+unique candidates per prompt --- Figure~\ref{fig:transcript} shows a verbatim
+instance. Selection then has nothing to select from: every
 selection head returns the single-sample reward ($0.0693$), forfeiting the entire
 BoN gain (unwatermarked BoN reaches $0.0848$ at $N{=}16$). More generally, marginal
 correctness with joint correlation suffices to bias \emph{any} selector, and the bias
@@ -96,11 +98,26 @@ fresh randomness \citep{verma2025watermarking} --- restores diversity but breaks
 strict distortion-free property it was meant to protect, and we show it is in fact
 strictly dominated by our construction.
 
+\textbf{Folklore vs.\ what is new.} That fixed-seed deterministic decoding
+returns identical outputs is known as an operational nuisance
+\citep{verma2025watermarking}. What has been missing is the consequence for the
+\emph{certified guarantee}: distortion-freeness is certified per sample but
+deployed under selection, and no prior analysis addressed (i) what selection
+does to the guarantee (it forfeits the entire BoN gain; in the worst case ---
+realized by the deployed scheme --- the output shift approaches
+$\mathrm{TV}=\tfrac12$), (ii) whether the accepted workaround is sound
+(softening is strictly dominated and remains correlated), (iii) what the right
+property is (joint preservation, exactly characterized below), and (iv) what
+restoring it costs at detection ($\sqrt{2\ln N}$, once per sequence, and
+order-optimal). The phenomenon is folklore; the broken guarantee, its
+quantification, and the closed-loop fix are not.
+
 \textbf{Formalization.} We define \emph{$N$-selection-closed} distortion-freeness:
 the joint distribution of the $N$ candidates (and hence of the output of \emph{any}
 selection operator applied to them) matches that of $N$ i.i.d.\ unwatermarked samples.
-Single-sample (marginal) distortion-freeness does not imply it; joint preservation
-trivially does (Theorem~\ref{thm:closure}). The property sits strictly between the
+Single-sample (marginal) distortion-freeness does not imply it; joint
+preservation is exactly the right condition --- necessary and sufficient
+(Theorem~\ref{thm:closure}). The property sits strictly between the
 deployed weak guarantee and cryptographic undetectability
 \citep{christ2023undetectable}, which implies it computationally but has no deployed
 instantiation (Proposition~\ref{prop:hierarchy}).
@@ -138,10 +155,13 @@ vs.\ broken distortion-freeness).
   \item We identify and quantify the failure of single-sample distortion-freeness
         under inference-time selection, on the deployed scheme family
         (\S\ref{sec:collapse}).
-  \item We formalize $N$-selection-closedness, prove marginal preservation is
-        insufficient and joint preservation sufficient for any selector, and place
-        the notion in a hierarchy between marginal distortion-freeness and
-        undetectability (\S\ref{sec:theory}).
+  \item We formalize $N$-selection-closedness, characterize it exactly (joint
+        preservation is necessary and sufficient for closure under every
+        selector), quantify the mechanism (candidate correlation $\rho$
+        attenuates the selection gain by $\sqrt{1-\rho}$,
+        Lemma~\ref{lem:attenuation}), and place the notion in a hierarchy
+        between marginal distortion-freeness and undetectability
+        (\S\ref{sec:theory}).
   \item We give the general jointly-coupled transform $\mathrm{JC}_N$ --- a
         compiler that lifts \emph{any} keyed watermarking scheme to a
         selection-closed one under a single master key
@@ -195,6 +215,30 @@ minimal targeted property, and our fix upgrades the deployed family in place
 (Proposition~\ref{prop:hierarchy}).
 
 \section{The Selection Collapse}\label{sec:collapse}
+
+\begin{figure}[t]
+\centering
+\fbox{\begin{minipage}{0.95\linewidth}\small
+\textbf{Prompt} (HH-RLHF): \emph{``I've been seeing a lot of slugs outside
+recently, even crawling up trees. Should I do something about them, or just
+let them be?''}\\[3pt]
+\textbf{Strict shared key} --- all $16$ ``Best-of-16'' candidates, verbatim:\\
+{\ttfamily That's an interesting sight! Slugs can be quite fascinating
+creatures. As for whether you should do something about them, it depends on a
+few factors.\,\ldots}\hfill$\times16$\\[3pt]
+\textbf{Jointly-coupled lift (per-candidate subkeys)} --- first three of $16$
+distinct candidates:\\
+{\ttfamily That's an interesting observation! Slugs can indeed be quite\,\ldots}\\
+{\ttfamily That's an interesting observation! Slugs can be quite resilient\,\ldots}\\
+{\ttfamily That's an interesting observation! Slugs can be quite adaptable\,\ldots}
+\end{minipage}}
+\caption{The collapse, verbatim (LLaMA-3.1-8B-Instruct, Gumbel watermark,
+$N{=}16$, same prompt). Under the strict shared key the Best-of-$16$ pool is
+sixteen byte-identical copies of one sample --- selection has nothing to
+select --- while the lift returns sixteen genuinely distinct candidates.}
+\label{fig:transcript}
+\end{figure}
+
 % Mechanism: determinism + identical initial condition -> identical trajectories.
 \subsection{Setup}
 Let $\pi$ denote the language model, $x$ a prompt, and consider $N$ candidate
@@ -204,6 +248,18 @@ $Y_{S}$. In context-hash schemes, the per-step noise at position $t$ is
 $g_t = \mathrm{PRF}(k, \mathrm{ctx}_t)$ where $\mathrm{ctx}_t$ is the local
 $h$-gram context, and the token is chosen by a deterministic rule (argmax) given
 logits and noise.
+
+\subsection{A thirty-second failure}\label{sec:coin}
+Let each candidate be a fair coin flip and let the selector prefer heads. With
+i.i.d.\ candidates, Best-of-$N$ returns heads with probability $1-2^{-N}$. Now
+couple the candidates into $N$ copies of a \emph{single} flip: every copy is
+still a perfectly fair coin --- the certified, marginal guarantee is intact ---
+yet the selector returns heads with probability $\tfrac12$. The deployed
+output laws differ by $\mathrm{TV}=\tfrac12-2^{-N}\to\tfrac12$: marginal
+correctness survives, the deployed guarantee does not, and the gap grows with
+the very compute ($N$) that selection adds. The strict shared key realizes
+exactly this coupling (Figure~\ref{fig:transcript});
+Example~\ref{ex:comonotone} gives the general statement.
 
 \subsection{Identical candidates: an induction}
 All candidates share the prompt, hence the initial context, hence the initial noise
@@ -225,6 +281,19 @@ guarantee); for $N>1$ it grows with $N$ (TV $0.16\to0.55$ at $\rho{=}0.9$),
 the candidate set's effective diversity collapses ($4.9\to2.5$ distinct answers
 of $5$ at $N{=}16$), and the selected reward drops accordingly. Independent
 candidates ($\rho{=}0$, our fix) keep the curve at zero.
+The mechanism admits a closed form:
+
+\begin{lemma}[Correlation attenuates the selection gain]\label{lem:attenuation}
+Let candidate rewards be exchangeable Gaussian with mean $\mu$, variance
+$\sigma^2$ and pairwise correlation $\rho\in[0,1]$, and let
+$m_N=\mathbb E[\max_{i\le N}Z_i]$ for i.i.d.\ standard normals
+($m_N\sim\sqrt{2\ln N}$). Then the expected reward of hard-BoN is
+$\mu+\sigma\sqrt{1-\rho}\,m_N$: the independent system's selection gain is
+attenuated by exactly $\sqrt{1-\rho}$, so the deployed output trails
+independent BoN by $(1-\sqrt{1-\rho}\,)\,\sigma\,m_N$ --- increasing in both
+$\rho$ and $N$, and equal to the entire gain at $\rho=1$ (the shared-key
+collapse). Proof in Appendix~\ref{app:proofs}.
+\end{lemma}
 
 \begin{figure}[t]
 \begin{center}
@@ -247,18 +316,27 @@ its $N$ candidates equals (or is computationally indistinguishable from) the joi
 law of $N$ i.i.d.\ unwatermarked samples, for every prompt.
 \end{definition}
 
-\begin{theorem}[Joint preservation closes any selector]\label{thm:closure}
-If the sampler is $N$-selection-closed, then for every (possibly randomized)
-selection operator $S$ that observes only the candidates (and side information
-independent of the watermark key), the law of the selected output $Y_S$ equals that
-of $S$ applied to unwatermarked i.i.d.\ candidates. Marginal preservation alone does
-not imply this for any $N\ge 2$.
+Throughout, selection operators observe the candidates and auxiliary
+randomness independent of the watermark key; base samplers draw all their
+randomness from the keyed noise stream; the verifier knows $N$ or an upper
+bound.
+
+\begin{theorem}[Characterization of selection-closure]\label{thm:closure}
+The following are equivalent:
+(i) the joint law of the candidates equals $Q_x^{\otimes N}$ for every prompt;
+(ii) for \emph{every} (possibly randomized) selection operator $S$ as above,
+the law of the selected output $Y_S$ equals that of $S$ applied to
+unwatermarked i.i.d.\ candidates.
+Moreover, marginal preservation alone does not imply (ii) for any $N\ge2$.
 \end{theorem}
 \begin{proof}[Proof sketch]
-$Y_S$ is a measurable functional of the candidate tuple and independent auxiliary
-randomness; equal (indistinguishable) joint laws have equal (indistinguishable)
-pushforwards. The converse failure is witnessed by \S\ref{sec:toy}: exact marginals,
-correlated joints, biased selection.
+(i)$\Rightarrow$(ii): $Y_S$ is a measurable functional of the candidate tuple
+and independent auxiliary randomness; equal joint laws have equal pushforwards.
+(ii)$\Rightarrow$(i): probe selectors of the form ``pick $i$ if the other
+coordinates fall in prescribed sets, else pick $j$'' identify every
+finite-dimensional joint by induction on its order (Appendix~\ref{app:proofs}).
+The final claim is witnessed by \S\ref{sec:toy}: exact marginals, correlated
+joints, biased selection.
 \end{proof}
 
 \begin{proposition}[Hierarchy]\label{prop:hierarchy}
@@ -285,18 +363,31 @@ $\mathrm{SubKey}_i=\mathrm{PRF}(\mathrm{MasterKey},\,i)$. One master key is
 stored; the derivation is free.
 
 \begin{theorem}[Lifting]\label{thm:lifting}
-Let $W$ be a keyed sampler with single-sample (key-averaged) output law $\mu_W$.
-Then, under PRF security:
-(a) the $N$ candidates of $\mathrm{JC}_N(W)$ are computationally
-indistinguishable from $N$ i.i.d.\ draws of $\mu_W$ --- for \emph{any} base
-scheme $W$, distortion-free or not;
-(b) if $W$ is marginally distortion-free ($\mu_W=Q$), then $\mathrm{JC}_N(W)$
-is $N$-selection-closed, and by Theorem~\ref{thm:closure} the released output
-under \emph{any} selection operator is distributed as unwatermarked
-Best-of-$N$;
-(c) any detector for $W$ lifts to a detector for $\mathrm{JC}_N(W)$ (the union
+Let $W$ be a keyed sampler with single-sample (key-averaged) output law
+$\mu_W$.
+(a) \emph{Ideal tier:} if the $N$ candidates are driven by truly independent
+random streams, their joint law \emph{equals} $\mu_W^{\otimes N}$ --- total
+variation exactly zero --- for any base scheme $W$, distortion-free or not.
+(b) \emph{Real tier:} with streams derived from one master key by a PRF
+($\mathrm{JC}_N$), the joint is computationally indistinguishable from
+$\mu_W^{\otimes N}$: every polynomial-time observer --- any efficient selector
+composed with any efficient downstream test --- has advantage at most the PRF
+distinguishing advantage $\varepsilon$.
+(c) If $W$ is marginally distortion-free ($\mu_W=Q$), then $\mathrm{JC}_N(W)$
+is $N$-selection-closed (exactly in the ideal tier, up to $\varepsilon$ in the
+real tier), and by Theorem~\ref{thm:closure} the released output under
+\emph{any} selection operator is distributed as unwatermarked Best-of-$N$.
+(d) Any detector for $W$ lifts to a detector for $\mathrm{JC}_N(W)$ (the union
 wrapper of \S\ref{sec:detection}) with a once-per-sequence multiplicity cost.
 \end{theorem}
+
+\begin{remark}[$\varepsilon$ is the price of detectability]\label{rem:price}
+Truly independent streams achieve exact closure but destroy the watermark:
+with no key there is nothing to detect. The PRF is precisely what buys the
+verifier reproducibility, and its $\varepsilon$ is the entire gap between the
+tiers. Exact distortion-freeness and detectability are jointly unattainable;
+$\mathrm{JC}_N$ attains both computationally.
+\end{remark}
 \begin{proof}[Proof sketch]
 (a) Domain separation makes the $N$ noise streams jointly indistinguishable
 from independent streams; each candidate is then an independent run of $W$,
@@ -344,6 +435,25 @@ coincides with the correct-subkey oracle at every $N$ and entropy level; its
 only cost is the $\sqrt{2\ln N}$ threshold (dash-dotted, bottom).}
 \label{fig:detectors}
 \end{figure}
+
+Two loss channels must not be conflated. The multiplicity cost above is the
+\emph{only} price of restoring independence, and it is order-optimal:
+detecting one elevated stream among $N$ independent nulls is the classical
+needle-in-a-haystack problem, for which no index-blind level-$\alpha$ test can
+improve on the max test's $\sqrt{2\ln N}$ threshold order
+\citep{ingster1997,donoho2004higher}. Separately, \emph{reward selection
+itself} tilts the released text toward weakly watermarked candidates --- a
+loss that exists for any token-level watermark under any key design:
+
+\begin{proposition}[Selection tilt]\label{prop:tilt}
+If each candidate's (reward, per-text signal) pair is bivariate Gaussian with
+correlation $\rho_{rs}$, i.i.d.\ across candidates, then hard-BoN selection
+shifts the released signal by
+$\mathbb E[z_{i^\ast}]-\mu_z=\rho_{rs}\,\sigma_z\,m_N$. With $\rho_{rs}<0$
+(measured $\approx-0.5$) the post-selection signal declines at the
+$\sqrt{2\ln N}$ rate --- the shape of Figure~\ref{fig:realshift} (right).
+Proof in Appendix~\ref{app:proofs}.
+\end{proposition}
 
 \subsection{Instantiations}\label{sec:instantiations}
 The framework specializes with no per-scheme work.
@@ -531,6 +641,26 @@ released output induces the distinguisher $D\circ\Phi$ acting on the candidate
 tuple (sampling $U$ internally), with identical advantage. Hence the released
 outputs are indistinguishable.
 
+\textbf{Necessity (probe selectors).}
+Assume (ii). Constant selectors $S\equiv i$ force every marginal to equal
+$Q_x$. We show by induction on $k$ that every $k$-dimensional joint
+factorizes. For $k=2$ and $i\ne j$, use the probe ``$S=i$ if $Y_j\in B$, else
+$j$'': its output law on $A$ is
+$P(Y_i\in A,Y_j\in B)+P(Y_j\in A,Y_j\notin B)$; the second term equals
+$Q_x(A\cap B^c)$ by the marginal step, and the i.i.d.\ reference value is
+$Q_x(A)Q_x(B)+Q_x(A\cap B^c)$, so $P(Y_i\in A,Y_j\in B)=Q_x(A)Q_x(B)$.
+For the step $k{-}1\to k$, fix distinct coordinates $i,t_1,\dots,t_{k-1}$ and
+sets $A,B_1,\dots,B_{k-1}$; write $E=\bigcap_m\{Y_{t_m}\in B_m\}$, pick
+$j=t_1$, and use the probe ``$S=i$ if $E$, else $j$''. Its output law on $A$
+is $P(Y_i\in A,E)+P(Y_j\in A,E^c)$; the second term is
+$P(Y_j\in A)-P(Y_j\in A,E)$, and $P(Y_j\in A,E)$ merges the two occurrences
+of $Y_j$ into $\{Y_j\in A\cap B_1\}$, hence is a $(k{-}1)$-dimensional joint,
+which factorizes by induction and matches the i.i.d.\ reference. Subtracting
+yields $P(Y_i\in A,E)=Q_x(A)\prod_m Q_x(B_m)$. Cylinder sets generate the
+product $\sigma$-algebra, so the joint equals $Q_x^{\otimes N}$. The
+computational version follows by quantitative bookkeeping of the same probes.
+\qed
+
 \textbf{Insufficiency of marginal preservation.}
 The following minimal example shows that exact marginals give no control
 whatsoever over the selected output; it is the formal core of
@@ -580,30 +710,55 @@ context-hash family, orthogonal to our fix.) Hence the inclusion is strict.
 \qed
 
 \subsection{Proof of Theorem~\ref{thm:lifting}}
-\textbf{(a)} All subkeys are evaluations of one PRF at distinct points
+\textbf{(a) Ideal tier.} With truly independent streams the candidates are
+independent runs of the unmodified base sampler by construction, hence i.i.d.\
+with law $\mu_W$; the joint \emph{equals} $\mu_W^{\otimes N}$ and every
+pushforward is preserved exactly.
+\textbf{(b) Real tier.} All subkeys are evaluations of one PRF at distinct points
 $(\mathrm{MasterKey},i)$, $i\in[N]$; by PRF security the tuple of derived noise
 streams is computationally indistinguishable from $N$ independent truly-random
 streams (a single invocation of the PRF game over the $N$ query points; no
 hybrid over candidates is needed). Conditioned on independent streams, the
 candidates are independent runs of the unmodified base sampler $W$, hence
 i.i.d.\ with law $\mu_W$; a distinguisher against the candidate tuple would
-therefore distinguish the streams, contradicting PRF security. Note that (a)
-makes no assumption on $W$ beyond keyed-ness --- in particular no
+therefore distinguish the streams, contradicting PRF security. Note that
+(a)--(b) make no assumption on $W$ beyond keyed-ness --- in particular no
 distortion-freeness.
-\textbf{(b)} If $\mu_W=Q_x$ for every prompt, then i.i.d.\ with marginal $Q_x$
+\textbf{(c)} If $\mu_W=Q_x$ for every prompt, then i.i.d.\ with marginal $Q_x$
 is precisely Definition~\ref{def:closure}, and Theorem~\ref{thm:closure} yields
 closure under every selection operator.
-\textbf{(c)} The base detector's null is exact under each wrong subkey (the
+\textbf{(d)} The base detector's null is exact under each wrong subkey (the
 text is independent of that subkey's stream), so the union wrapper of
 Proposition~\ref{prop:union} applies verbatim, with its once-per-sequence
 multiplicity cost and index-recovery byproduct. \qed
+
+\subsection{Proofs of Lemma~\ref{lem:attenuation} and Proposition~\ref{prop:tilt}}
+\emph{Lemma~\ref{lem:attenuation}.} Write the equicorrelated vector as
+$X_i=\mu+\sigma(\sqrt{\rho}\,Z_0+\sqrt{1-\rho}\,Z_i)$ with independent
+standard normals $Z_0,Z_1,\dots,Z_N$. Then
+$\max_i X_i=\mu+\sigma\sqrt{\rho}\,Z_0+\sigma\sqrt{1-\rho}\,\max_i Z_i$, and
+taking expectations kills the shared factor:
+$\mathbb E[\max_i X_i]=\mu+\sigma\sqrt{1-\rho}\,m_N$. \qed
+
+\emph{Proposition~\ref{prop:tilt}.} Regress the signal on the reward:
+$z_i=\mu_z+\rho_{rs}\sigma_z(R_i-\mu_R)/\sigma_R+\eta_i$ with $\eta_i$
+independent of the rewards. Selecting $i^\ast=\arg\max_i R_i$ and taking
+expectations, $\mathbb E[\eta_{i^\ast}]=0$ (the selection is measurable in the
+rewards alone), so
+$\mathbb E[z_{i^\ast}]=\mu_z+\rho_{rs}\sigma_z\,
+\mathbb E[R_{i^\ast}-\mu_R]/\sigma_R=\mu_z+\rho_{rs}\sigma_z m_N$ for
+i.i.d.\ Gaussian rewards. \qed
 
 \subsection{Detection under $N$ subkeys}\label{app:detection}
 We work in the location-shift signal model of \S\ref{sec:detection}: token
 scores under the correct subkey at watermarked positions are i.i.d.\
 $\mathrm{Gumbel}(\Delta,1)$; under any incorrect subkey, and at any position of
 unwatermarked text, scores are i.i.d.\ $\mathrm{Gumbel}(0,1)$, independent
-across subkeys. For uniform logits over a nucleus of size $V$ the model is exact
+across subkeys --- independence holds because distinct subkeys read disjoint
+PRF domains (exactly in the ideal tier, computationally in the real tier);
+this is what licenses \emph{exact} null calibration (\v{S}id\'ak or
+empirical quantiles) in place of the conservative Bonferroni bound, cf.\ the
+matched-FPR evaluation of Appendix~\ref{app:exp}. For uniform logits over a nucleus of size $V$ the model is exact
 with $\Delta=\ln V$ (the winning token's noise is the maximum of $V$ i.i.d.\
 Gumbels, i.e., $\mathrm{Gumbel}(\ln V,1)$); for peaked distributions it is an approximation.
 Throughout, $\gamma$ is Euler's constant,
