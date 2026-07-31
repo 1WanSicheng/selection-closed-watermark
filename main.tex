@@ -120,14 +120,8 @@ under each subkey (only $N$, or an upper bound, need be known --- not the
 selected index), paying a once-per-sequence threshold penalty of
 $\sqrt{2\ln N}$ --- empirically $0.3$ z-score at $N{=}16$ against a signal of
 $z\approx7.7$ --- and recovering the winning candidate's index as a free audit
-log. For max-stable score families (Gumbel/exponential) we additionally analyze
-a column-max \emph{aggregate} detector (the right fallback when $N$ is unknown
-or outputs are block-composed): its null is \emph{exactly} calibrated, but its
-per-token signal contracts in closed form from $\Delta$ to
-$\ln(1+(e^{\Delta}-1)/N)$ (Proposition~\ref{prop:aggregate}, verified to
-machine precision, Figure~\ref{fig:detectors}) --- a per-token $\ln N$ dilution
-that collapses in the low-entropy regime. The two detectors are thus separated
-by a per-sequence $\sqrt{2\ln N}$ versus a per-token $\ln N$.
+log. Figure~\ref{fig:detectors} verifies that the union detector matches the
+correct-subkey oracle at every $N$ and entropy level.
 
 \textbf{Results.} On LLaMA-3.1-8B-Instruct with HH-RLHF prompts and an ArmoRM reward:
 (i) strict shared-key BoN returns identical candidates and zero BoN gain;
@@ -151,10 +145,9 @@ vs.\ broken distortion-freeness).
   \item We give the general jointly-coupled transform $\mathrm{JC}_N$ --- a
         compiler that lifts \emph{any} keyed watermarking scheme to a
         selection-closed one under a single master key
-        (Theorem~\ref{thm:lifting}) --- together with a lifted detection theory:
-        the scheme-agnostic union wrapper vs.\ the family-specific aggregate
-        detector, separated by a per-sequence $\sqrt{2\ln N}$ vs.\ per-token
-        $\log N$ cost (\S\ref{sec:method}).
+        (Theorem~\ref{thm:lifting}) --- together with the lifted union
+        detection and its once-per-sequence $\sqrt{2\ln N}$ cost analysis
+        (\S\ref{sec:method}).
   \item Instantiating the framework on the deployed Gumbel/Aaronson scheme, a
         real aligned model shows full recovery of the BoN gain at strict
         distortion-freeness, and strict dominance over the deployed softened
@@ -189,8 +182,7 @@ multi-draft selection \emph{for} the watermark (choosing drafts by watermark sco
 the dual of our setting; WaterSearch also employs per-candidate seeds as a mechanism,
 without a selection-closure analysis. Multi-bit watermarking decodes a message by
 running detection under every message key and taking the best p-value
-\citep{fernandez2023three}; our union wrapper inherits this standard practice, and
-our analysis contributes the cost separation against aggregate detection.
+\citep{fernandez2023three}; our union wrapper inherits this standard practice.
 Unlike this line of work, we propose no new watermarking scheme: our object of
 study is the \emph{transform} that any keyed scheme composes with, and its
 guarantees are proved once for all schemes and selectors.
@@ -322,13 +314,11 @@ full closure guarantee. As a byproduct, strict (argmax) decoders can be used
 again --- no softening --- so each candidate individually retains the exact
 single-sample guarantee.
 
-\subsection{Detection: union vs.\ aggregate}\label{sec:detection}
+\subsection{Detection: the union wrapper}\label{sec:detection}
 The verifier knows the master key and $N$ (an upper bound suffices), not the
 selected index. The \emph{union wrapper} is scheme-agnostic --- it runs the base
-scheme's own detector under each derived subkey --- while the \emph{aggregate}
-variant exploits max-stability and is specific to Gumbel-family scores, which we
-adopt below for concreteness. We analyze both under a location-shift signal
-model:
+scheme's own detector under each derived subkey. We analyze it under a
+location-shift signal model:
 at a watermarked token the correct subkey's score is
 $\mathrm{Gumbel}(\Delta,1)$, where $\Delta$ is the per-token signal (for uniform
 logits over a nucleus of size $V$, exactly $\Delta=\ln V$; in general $\Delta$
@@ -344,42 +334,14 @@ $o(1)$ relative to the $\sqrt{T}\,\Delta$ signal
 the selected candidate's index --- an audit log of the selection, at no extra cost
 (cf.\ message decoding in multi-bit watermarking \citealp{fernandez2023three}).
 
-\textbf{Aggregate (column-max) detector.} Score each token against
-$g^{*}_v=\max_i g_{i,v}$. By max-stability the null is \emph{exactly}
-$\mathrm{Gumbel}(\ln N,1)$ --- calibration is free and no index enumeration is
-needed --- but the per-token signal contracts in closed form
-(Proposition~\ref{prop:aggregate}):
-\begin{equation}\label{eq:aggsignal}
-\Delta_{\mathrm{agg}} \;=\; \ln\!\Big(1+\tfrac{e^{\Delta}-1}{N}\Big)
-\;\approx\;
-\begin{cases}
-\Delta-\ln N, & \Delta\gg\ln N \text{ (high entropy)},\\[2pt]
-e^{\Delta}/N \to 0, & \Delta\ll\ln N \text{ (low entropy)}.
-\end{cases}
-\end{equation}
-The penalty is paid \emph{per token} and does not vanish with sequence length:
-the two detectors are separated by a per-sequence $\sqrt{2\ln N}$ versus a
-per-token $\ln N$. Figure~\ref{fig:detectors} confirms the analysis: the union
-detector coincides with the correct-subkey oracle at every $N$, while the
-aggregate decays exactly along \eqref{eq:aggsignal} in the high-entropy
-regime (machine-precision agreement) and collapses in the low-entropy regime,
-where \eqref{eq:aggsignal} is a conservative bound. The aggregate remains the
-right fallback when $N$ is unknown or unbounded, or when the released output is
-composed from multiple candidates block-wise and union enumeration is
-combinatorial.
-
 \begin{figure}[t]
 \begin{center}
 \includegraphics[width=0.98\linewidth]{figures/detector_comparison.pdf}
 \end{center}
-\caption{Union vs.\ aggregate detection under $N$ subkeys
-(simulation: $V{=}10^3$, $T{=}200$ tokens, $800$ runs). The union detector (green)
-coincides with the correct-subkey oracle (gray, hidden underneath) at every $N$;
-its only cost is the $\sqrt{2\ln N}$ threshold (dash-dotted, bottom). The
-aggregate detector (red) pays the per-token contraction of
-\eqref{eq:aggsignal} (dotted: closed form) --- exact in the high-entropy
-regime, a conservative bound in the low-entropy regime --- and collapses as
-$N$ grows.}
+\caption{Union detection under $N$ subkeys
+(simulation: $V{=}10^3$, $T{=}200$ tokens, $800$ runs). The union detector
+coincides with the correct-subkey oracle at every $N$ and entropy level; its
+only cost is the $\sqrt{2\ln N}$ threshold (dash-dotted, bottom).}
 \label{fig:detectors}
 \end{figure}
 
@@ -388,10 +350,9 @@ The framework specializes with no per-scheme work.
 \emph{Gumbel/Aaronson} (our flagship, \S\ref{sec:experiments}): candidate $i$
 runs strict argmax decoding with noise seeded by
 $(\mathrm{SubKey}_i,\mathrm{ctx})$; the union wrapper reuses the standard
-$\Gamma$-null detector; the aggregate detector applies since the score family
-is max-stable.
+$\Gamma$-null detector.
 \emph{Exponential / permute-and-flip samplers} \citep{zhao2024permute}: identical
-treatment --- the noise is the same exponential family, so both detectors carry
+treatment --- the noise is the same exponential family, so the detector carries
 over verbatim.
 \emph{Inverse-transform / random-offset schemes} \citep{kuditipudi2023robust}:
 the lift replaces the random offset's approximate decorrelation with exact
@@ -644,9 +605,8 @@ $\mathrm{Gumbel}(\Delta,1)$; under any incorrect subkey, and at any position of
 unwatermarked text, scores are i.i.d.\ $\mathrm{Gumbel}(0,1)$, independent
 across subkeys. For uniform logits over a nucleus of size $V$ the model is exact
 with $\Delta=\ln V$ (the winning token's noise is the maximum of $V$ i.i.d.\
-Gumbels, i.e., $\mathrm{Gumbel}(\ln V,1)$); for peaked distributions it is an
-approximation, and \eqref{eq:aggsignal} becomes a conservative bound
-(Remark~\ref{rem:validation}). Throughout, $\gamma$ is Euler's constant,
+Gumbels, i.e., $\mathrm{Gumbel}(\ln V,1)$); for peaked distributions it is an approximation.
+Throughout, $\gamma$ is Euler's constant,
 $\sigma_g^2=\pi^2/6$, and $T$ is the number of scored tokens.
 
 \begin{proposition}[Union detector]\label{prop:union}
@@ -673,54 +633,6 @@ maximum is $O_P(\sqrt{2\ln N})$, so for
 $\sqrt T\,\Delta/\sigma_g>\sqrt{2\ln N}$ the maximum is attained by the correct
 subkey with probability $\to1$, which also gives (c).
 \end{proof}
-
-\begin{proposition}[Aggregate detector]\label{prop:aggregate}
-Let $g^{*}_v=\max_{i\le N} g_{i,v}$ and score
-$Z_{\mathrm{agg}}=\big(\sum_{t\le T} g^{*}(x_t)-T(\ln N+\gamma)\big)/(\sigma_g\sqrt T)$.
-Then:
-(a) under the null, $g^{*}(x_t)\sim\mathrm{Gumbel}(\ln N,1)$ exactly, so
-$Z_{\mathrm{agg}}$ is asymptotically standard normal --- calibration requires no
-index enumeration and no simulation;
-(b) at a watermarked position,
-$g^{*}(x_t)\sim\mathrm{Gumbel}\big(\ln(e^{\Delta}+N-1),\,1\big)$ exactly, so the
-per-token signal is
-\[
-\Delta_{\mathrm{agg}}=\ln\big(e^{\Delta}+N-1\big)-\ln N
-=\ln\!\Big(1+\tfrac{e^{\Delta}-1}{N}\Big),
-\]
-and $\mathbb E[Z_{\mathrm{agg}}]=\sqrt T\,\Delta_{\mathrm{agg}}/\sigma_g$.
-\end{proposition}
-\begin{proof}
-Both claims are the max-stability of the Gumbel family: the maximum of
-independent $\mathrm{Gumbel}(a_i,1)$ is $\mathrm{Gumbel}(\ln\sum_i e^{a_i},1)$.
-Under the null all locations are $0$, giving $\ln N$; at a watermarked position
-the locations are $(\Delta,0,\dots,0)$, giving $\ln(e^{\Delta}+N-1)$. The
-variance is that of a unit-scale Gumbel in both cases.
-\end{proof}
-
-\begin{corollary}[Regime separation]\label{cor:regimes}
-The union detector's penalty is $\sqrt{2\ln N}$ \emph{once per sequence}; the
-aggregate detector's penalty is $\Delta-\Delta_{\mathrm{agg}}$ \emph{per token}.
-Consequently: for $\Delta\gg\ln N$,
-$\Delta_{\mathrm{agg}}\approx\Delta-\ln N$ and the aggregate retains a constant
-fraction of the signal; for $\Delta\le\ln N$,
-$\Delta_{\mathrm{agg}}\le e^{\Delta}/N$ and the aggregate's power collapses
-exponentially in $\ln N-\Delta$, while the union detector is unaffected. In
-particular, low-entropy text (small $\Delta$) is precisely where the aggregate
-fails and the union is required.
-\end{corollary}
-
-\begin{remark}[Empirical validation]\label{rem:validation}
-In the simulation of Figure~\ref{fig:detectors} (uniform logits, $V=10^3$,
-$\Delta=6.78$), Proposition~\ref{prop:aggregate} matches the aggregate's
-measured z to machine precision across $N=2$--$64$ (e.g., $N{=}64$: measured
-$29.8$, predicted $29.7$; $N{=}4$: $59.5$ vs.\ $59.6$). For peaked logits
-($\Delta=3.42$) the location-shift model underestimates the winner's upper tail
-and the closed form is conservative (measured $8.7$ vs.\ predicted $4.2$ at
-$N{=}64$); the ordering and the collapse regime are unchanged. The union
-detector matches the oracle at every $N$ in both regimes ($74.8$ vs.\ $74.8$;
-$38.2$ vs.\ $37.7$), with threshold inflation $\le2.9$.
-\end{remark}
 
 \section{Experimental Details}\label{app:exp}
 

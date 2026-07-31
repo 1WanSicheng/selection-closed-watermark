@@ -1,8 +1,6 @@
-"""Figure 2: union vs aggregate detection under N subkeys, plus the exact
-closed form Delta_agg = ln(1+(e^Delta-1)/N) (Prop. 3 / Eq. 1).
-Simulation: V-token vocab, per-position logits with spread s (entropy knob);
-selected candidate scored under (i) its own subkey (oracle), (ii) union over N,
-(iii) column-max aggregate with exactly calibrated Gumbel(ln N) null.
+"""Figure 2: union detection under N subkeys — the union detector matches the
+correct-subkey oracle at every N; its only cost is the sqrt(2 ln N) threshold.
+Simulation: V-token vocab, per-position logits with spread s (entropy knob).
 Output: figures/detector_comparison.pdf
 """
 import math
@@ -22,7 +20,7 @@ def gum(sh):
     return -np.log(-np.log(rng.random(sh)))
 
 def run(N, s):
-    zs, zu, za, ents = [], [], [], []
+    zs, zu, ents = [], [], []
     for _ in range(M):
         l = s * rng.standard_normal(V)
         p = np.exp(l - l.max()); p /= p.sum()
@@ -35,22 +33,17 @@ def run(N, s):
         zs.append(z_own)
         znull = (gum((max(N - 1, 1), T)).sum(1) - T * EULER) / sd
         zu.append(max([z_own] + list(znull)) if N > 1 else z_own)
-        gagg = np.maximum(gj, math.log(N - 1) + gum(T)) if N > 1 else gj
-        za.append((gagg.sum() - T * (math.log(N) + EULER)) / sd)
-    return np.mean(ents), np.mean(zs), np.mean(zu), np.mean(za)
+    return np.mean(ents), np.mean(zs), np.mean(zu)
 
 Ns = [2, 4, 8, 16, 32, 64]
 DATA = {}
 for s, tag in [(0.5, "high"), (3.0, "low")]:
-    DATA[tag] = {"single": [], "union": [], "agg": [], "H": None}
+    DATA[tag] = {"single": [], "union": [], "H": None}
     for N in Ns:
-        H, zs, zu, za = run(N, s)
-        for k, v in [("single", zs), ("union", zu), ("agg", za)]:
+        H, zs, zu = run(N, s)
+        for k, v in [("single", zs), ("union", zu)]:
             DATA[tag][k].append(v)
         DATA[tag]["H"] = H
-    D = np.mean(DATA[tag]["single"]) * SG / math.sqrt(T)   # per-token Delta
-    DATA[tag]["pred"] = [math.sqrt(T) * math.log(1 + (math.exp(D) - 1) / N) / SG
-                         for N in Ns]
 
 fig, axs = plt.subplots(1, 2, figsize=(8.6, 3.1))
 for ax, tag, ttl in [(axs[0], "high", "High entropy ($H\\approx6.8$ nats)"),
@@ -60,9 +53,6 @@ for ax, tag, ttl in [(axs[0], "high", "High entropy ($H\\approx6.8$ nats)"),
             label="oracle (correct subkey)")
     ax.plot(Ns, d["union"], "-", color="#1a7a3a", lw=2, marker="s", ms=4,
             label="union detector")
-    ax.plot(Ns, d["agg"], "-", color="#c0392b", lw=2, marker="^", ms=4,
-            label="aggregate (column-max)")
-    ax.plot(Ns, d["pred"], ":", color="#c0392b", lw=1.4, label="aggregate closed form")
     ax.plot(Ns, [math.sqrt(2 * math.log(N)) for N in Ns], "-.", color="#888888",
             lw=1, label="union threshold $\\sqrt{2\\ln N}$")
     ax.set_xscale("log", base=2); ax.set_xticks(Ns); ax.set_xticklabels(Ns)
