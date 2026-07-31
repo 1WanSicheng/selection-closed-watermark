@@ -36,6 +36,7 @@ pulled outputs: `mtx16/{unwm_kgw,gumbel,unwm_gumbel}_scored.jsonl`,
 | `analysis/fig2_detectors.py` | Figure 2 (`figures/detector_comparison.pdf`) — union vs aggregate + closed form |
 | `analysis/fig3_real_shift.py` | Figure 3 (`figures/real_shift_vs_N.pdf`) + diversity table |
 | `analysis/suite_table.py` | Table 2 (full metric suite) + matched-FPR table |
+| `analysis/bootstrap_ci.py` | Appendix CI table — paired bootstrap (10k resamples, same prompt indices across arms) for rewards, median z, differences, gain-retained |
 
 ## Repro map
 

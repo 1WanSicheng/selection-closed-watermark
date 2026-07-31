@@ -44,20 +44,22 @@ class WmGeneratorBeam:
         """Optimized hashint using GPU."""
         return self.hashtable[integer_tensor % len(self.hashtable)]
 
-    def get_seed_rng(self, input_ids: torch.LongTensor) -> int:
-        """Seed RNG with hash of input_ids."""
+    def get_seed_rng(self, input_ids: torch.LongTensor, salt: int = None) -> int:
+        """Seed RNG with hash of input_ids. salt overrides self.salt_key
+        (used by the independent-key oracle, one salt per candidate)."""
+        salt_key = self.salt_key if salt is None else salt
         if self.seeding == "hash":
             seed = self.seed
             for i in input_ids:
-                seed = (seed * self.salt_key + i.item()) % (2**64 - 1)
+                seed = (seed * salt_key + i.item()) % (2**64 - 1)
         elif self.seeding == "additive":
-            seed = self.salt_key * torch.sum(input_ids).item()
+            seed = salt_key * torch.sum(input_ids).item()
             seed = self.hashint(seed)
         elif self.seeding == "skip":
-            seed = self.salt_key * input_ids[0].item()
+            seed = salt_key * input_ids[0].item()
             seed = self.hashint(seed)
         elif self.seeding == "min":
-            seed = self.hashint(self.salt_key * input_ids)
+            seed = self.hashint(salt_key * input_ids)
             seed = torch.min(seed).item()
         return seed
 
@@ -258,6 +260,67 @@ class OpenaiGeneratorBeamStrict(WmGeneratorBeam):
 
     SUBKEY_MIX = 424242
 
+    def __init__(self, *args, subkey: bool = False, ik_salts=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.subkey = subkey
+        # ik_salts: independently drawn salt keys, one per candidate
+        # (Theorem-2 tier: exact joint closure via independently stored keys).
+        # Candidate i runs the UNMODIFIED sampler under its own salt key.
+        self.ik_salts = list(ik_salts) if ik_salts is not None else None
+        self._num_beams = 1
+
+    def generate(self, *args, **kwargs):
+        self._num_beams = kwargs.get("num_beams", 1)
+        return super().generate(*args, **kwargs)
+
+    def sample_next(
+        self,
+        logits: torch.FloatTensor,
+        ngram_tokens: torch.LongTensor,
+        temperature: float = 0.8,
+        top_p: float = 0.95,
+    ) -> Tuple[torch.LongTensor, torch.FloatTensor]:
+        if temperature > 0:
+            probs = torch.softmax(logits / temperature, dim=-1)
+            probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
+            probs_sum = torch.cumsum(probs_sort, dim=-1)
+            mask = probs_sum - probs_sort > top_p
+            probs_sort[mask] = 0.0
+            probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
+            picks = torch.zeros(ngram_tokens.shape[0], 1, dtype=torch.long, device=probs_sort.device)
+            for ii in range(ngram_tokens.shape[0]):
+                if self.ik_salts is not None:
+                    seed = self.get_seed_rng(
+                        ngram_tokens[ii], salt=self.ik_salts[ii % self._num_beams])
+                else:
+                    seed = self.get_seed_rng(ngram_tokens[ii])
+                    if self.subkey:
+                        cand = ii % self._num_beams
+                        seed = (seed * self.salt_key + self.SUBKEY_MIX + cand) % (2**64 - 1)
+                self.rng.manual_seed(seed)
+                vocab_size = logits.shape[-1]
+                rs = torch.rand(vocab_size, generator=self.rng, device=probs_sort.device)
+                rs = rs.roll(-self.payload)
+                rs = rs[probs_idx[ii]]
+                # strict Aaronson: argmax r^(1/p) over the nucleus (no multinomial softening)
+                score = torch.where(probs_sort[ii] > 0, torch.pow(rs, 1 / probs_sort[ii]),
+                                    torch.zeros_like(rs))
+                picks[ii, 0] = int(torch.argmax(score))
+            next_scores = torch.gather(probs_sort, -1, picks)
+            next_tokens = torch.gather(probs_idx, -1, picks)
+        else:
+            next_scores, next_tokens = torch.max(logits, dim=-1, keepdim=True)
+        return next_tokens, next_scores
+
+
+class PFGeneratorBeamStrict(WmGeneratorBeam):
+    """Strict permute-and-flip / exponential watermark (Zhao): token =
+    argmax over the nucleus of log p - log r, deterministic given key+context.
+    subkey=False: shared key -> identical candidates. subkey=True: per-candidate
+    derived key (same mixing constant as OpenaiGeneratorBeamStrict)."""
+
+    SUBKEY_MIX = 424242
+
     def __init__(self, *args, subkey: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
         self.subkey = subkey
@@ -291,10 +354,11 @@ class OpenaiGeneratorBeamStrict(WmGeneratorBeam):
                 vocab_size = logits.shape[-1]
                 rs = torch.rand(vocab_size, generator=self.rng, device=probs_sort.device)
                 rs = rs.roll(-self.payload)
-                rs = rs[probs_idx[ii]]
-                # strict Aaronson: argmax r^(1/p) over the nucleus (no multinomial softening)
-                score = torch.where(probs_sort[ii] > 0, torch.pow(rs, 1 / probs_sort[ii]),
-                                    torch.zeros_like(rs))
+                rs = rs[probs_idx[ii]].clamp_min(1e-12)
+                # PF: argmax over nucleus of log p - log r  (-inf outside nucleus)
+                score = torch.where(probs_sort[ii] > 0,
+                                    torch.log(probs_sort[ii].clamp_min(1e-30)) - torch.log(rs),
+                                    torch.full_like(rs, float("-inf")))
                 picks[ii, 0] = int(torch.argmax(score))
             next_scores = torch.gather(probs_sort, -1, picks)
             next_tokens = torch.gather(probs_idx, -1, picks)
@@ -412,3 +476,57 @@ class PFGeneratorBeam(WmGeneratorBeam):
             next_scores, next_tokens = torch.max(logits, dim=-1, keepdim=True)
 
         return next_tokens, next_scores
+
+
+class MarylandGeneratorBeamStrict(MarylandGeneratorBeam):
+    """KGW with DERANDOMIZED (keyed) sampling: greenlist bias as usual, but the
+    token is drawn by inverse-CDF with a uniform derived from (key, context)
+    -- deterministic given the key, as in reproducible/cached deployments.
+    subkey=False: shared sampling stream -> identical candidates.
+    subkey=True : per-candidate sampling stream -> iid over the SAME biased
+    marginal (exact inverse-transform sampling). The greenlist key is shared in
+    both cases, so the standard KGW detector applies unchanged (no union)."""
+
+    SAMP_MIX = 777001
+
+    def __init__(self, *args, subkey: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.subkey = subkey
+        self._num_beams = 1
+
+    def generate(self, *args, **kwargs):
+        self._num_beams = kwargs.get("num_beams", 1)
+        return super().generate(*args, **kwargs)
+
+    def sample_next(
+        self,
+        logits: torch.FloatTensor,
+        ngram_tokens: torch.LongTensor,
+        temperature: float = 0.8,
+        top_p: float = 0.95,
+    ) -> Tuple[torch.LongTensor, torch.FloatTensor]:
+        logits = self.logits_processor(logits, ngram_tokens)  # greenlist bias (base key)
+        if temperature > 0:
+            probs = torch.softmax(logits / temperature, dim=-1)
+            probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
+            probs_sum = torch.cumsum(probs_sort, dim=-1)
+            mask = probs_sum - probs_sort > top_p
+            probs_sort[mask] = 0.0
+            probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
+            picks = torch.zeros(ngram_tokens.shape[0], 1, dtype=torch.long, device=probs_sort.device)
+            for ii in range(ngram_tokens.shape[0]):
+                seed = self.get_seed_rng(ngram_tokens[ii])
+                seed = (seed * self.salt_key + self.SAMP_MIX) % (2**64 - 1)
+                if self.subkey:
+                    seed = (seed * self.salt_key + (ii % self._num_beams)) % (2**64 - 1)
+                self.rng.manual_seed(seed)
+                u = torch.rand(1, generator=self.rng, device=probs_sort.device)
+                cdf = torch.cumsum(probs_sort[ii], dim=-1)
+                picks[ii, 0] = int(torch.searchsorted(cdf, u.clamp_max(1 - 1e-9)).clamp_max(cdf.numel() - 1))
+            next_scores = torch.gather(probs_sort, -1, picks)
+            next_tokens = torch.gather(probs_idx, -1, picks)
+        else:
+            next_scores, next_tokens = torch.max(logits, dim=-1, keepdim=True)
+        return next_tokens, next_scores
+
+
