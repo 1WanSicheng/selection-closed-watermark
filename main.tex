@@ -466,7 +466,8 @@ subkey arm's union $z$ exceeds the softened baseline at \emph{every} $N$.
 
 \textbf{Selector family.}
 Appendix~\ref{app:selectors} extends the evaluation to seven key-free
-selectors (including rejection sampling and min-perplexity reranking) and two
+selectors from alignment practice (including rejection sampling and
+diversity-preserving filter+sample) and two
 key-dependent stress selectors: closure holds within noise for every key-free
 selector, the theorem's key-independence side condition is empirically visible,
 and a worst-case key-oracle evader still faces $0.938$ TPR.
@@ -821,10 +822,12 @@ the strict shared key shares the entire generation.
 
 \subsection{Selector family}\label{app:selectors}
 Theorem~\ref{thm:closure} promises closure for \emph{every} selection operator
-that is independent of the watermark key. We test seven key-free selectors ---
-single, uniform-random, hard-/soft-/Exp-BoN, rejection sampling (accept the
-first candidate with reward above the unwatermarked median, random scan order),
-and min-perplexity reranking --- and two \emph{key-dependent} stress selectors
+that is independent of the watermark key. We test seven key-free selectors
+drawn from alignment practice --- single, uniform-random (control),
+hard-/soft-/Exp-BoN, rejection sampling (accept the first candidate with reward
+above the unwatermarked median, random scan order), and filter+sample (discard
+the bottom half by reward, sample uniformly among survivors --- the standard
+diversity-preserving softening) --- and two \emph{key-dependent} stress selectors
 that deliberately violate the theorem's side condition: adversarial min-$z$
 (an evader with a key oracle picks the weakest-watermarked candidate) and
 max-$z$ (WaterMax-style watermark boosting). All at $N{=}16$.
@@ -853,8 +856,9 @@ hard-BoN      & yes & $-0.0154$ & $+0.0004$ & $+0.0013$ & $6.47$ & $0.891$ \\
 soft-BoN      & yes & $-0.0047$ & $-0.0000$ & $+0.0006$ & $7.24$ & $0.992$ \\
 Exp-BoN       & yes & $-0.0049$ & $-0.0001$ & $+0.0007$ & $7.05$ & $0.992$ \\
 rejection     & yes & $-0.0058$ & $-0.0003$ & $+0.0018$ & $6.85$ & $0.922$ \\
-min-PPL       & yes & $-0.0060$ & $-0.0010$ & $-0.0029$ & $5.16$ & $0.828$ \\
+filter+sample & yes & $-0.0075$ & $-0.0002$ & $+0.0004$ & $6.88$ & $0.977$ \\
 \midrule
+\multicolumn{7}{l}{\emph{Stress tests (non-deployment; violate the key-independence side condition):}} \\
 adv.\ min-$z$ & \textbf{no} & $-0.0014$ & $+0.0043$ & $+0.0053$ & $3.98$ & $0.938$ \\
 max-$z$       & \textbf{no} & $+0.0000$ & $-0.0101$ & $-0.0113$ & $13.15$ & $0.984$ \\
 \bottomrule
@@ -875,14 +879,12 @@ key is evasion-immune ($z{=}8.0$ under every selector) but selection-dead ---
 a clean statement of the diversity/evasion trade.
 (iv) \emph{Watermark boosting} composes with the framework: max-$z$ selection
 lifts the median $z$ to $13.2$ at a $0.011$ reward cost, a WaterMax-style
-operating point. (v) \emph{Quality reranking} (min-PPL) is the most
-watermark-hostile benign selector ($z$ $5.16$): the most model-typical
-candidate carries the weakest signal. Consistently, the generator's
-likelihood-sorted candidate order exhibits a monotone gradient --- reward
-falls from $0.073$ to $0.059$ and median $z$ rises from $4.7$ to $12.9$ across
-likelihood ranks --- i.e., model-typical text is simultaneously
-reward-preferred and watermark-poor, the within-set mirror of the
-reward--watermark anticorrelation.
+operating point. (v) \emph{Likelihood-rank gradient}: ordering the candidate set by sequence
+likelihood reveals a monotone gradient --- reward falls from $0.073$ to
+$0.059$ and median $z$ rises from $4.7$ to $12.9$ across ranks --- i.e.,
+model-typical text is simultaneously reward-preferred and watermark-poor, the
+within-set mirror of the reward--watermark anticorrelation (and the reason
+reward selection mildly weakens any token-level watermark).
 
 \subsection{Calibration}
 Union detector on unwatermarked text ($128$ prompts $\times16$ candidates):

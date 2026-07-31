@@ -52,6 +52,10 @@ def select(A, rule, rng, draws=200, shuffles=20):
                  else rng.exponential(size=(draws, len(r))))
             idx = np.argmax(r / LAM + E, 1)
             rew.append(r[idx].mean()); zs.append(np.median(z[idx])); continue
+        if rule == "filtersample":  # top-half by reward, uniform among survivors
+            med = np.median(r); keep = np.where(r >= med)[0]
+            idx = rng.choice(keep, size=draws)
+            rew.append(r[idx].mean()); zs.append(np.median(z[idx])); continue
         if rule == "reject":  # iid semantics: random scan order
             rr, zz = [], []
             for _ in range(shuffles):
@@ -67,9 +71,10 @@ def select(A, rule, rng, draws=200, shuffles=20):
         rew.append(r[i]); zs.append(z[i])
     return np.mean(rew), np.median(zs), np.array(zs)
 
-RULES = ["single", "random", "hard", "soft", "exp", "reject", "minppl",
-         "advminz", "wmmaxz"]
-KEYFREE = {"single", "random", "hard", "soft", "exp", "reject", "minppl"}
+RULES = ["single", "random", "hard", "soft", "exp", "reject", "filtersample",
+         "minppl", "advminz", "wmmaxz"]
+KEYFREE = {"single", "random", "hard", "soft", "exp", "reject",
+           "filtersample", "minppl"}
 print("=== closure: reward gap (arm - unwm, same selector) ===")
 U = {}
 for ru in RULES:
