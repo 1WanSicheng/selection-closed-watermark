@@ -13,6 +13,8 @@ Self-contained pipeline + analysis for all figures and tables.
 | `pf_bon_detect_union.py` | **union detector**: `NKEYS=0` base key, `NKEYS=N` union over N subkeys with Bonferroni (`p = min(1, N·min_i p_i)`). Subkey mix must match the generator: `seed ← (seed·salt + 424242 + i) mod 2^64−1`. |
 | `ppl_orig.py` | perplexity of candidates under the generating model. |
 | `run_jcs.sh` | orchestrator for the main experiment (ss + sk arms: gen → reward → detect incl. union-FPR calibration). |
+| `pf_bon_detect_ik.py` | union detector for the independent-key oracle arm: base test under each of the 16 stored salt keys + Bonferroni. |
+| `run_jcs_ik.sh` | orchestrator for the independent-key oracle arm (`--wm gumbel_ik`; requires the `ik_salts` patch in `wm_generators_beam.py` + the `gumbel_ik` arm in `pf_bon_gen.py`). |
 
 Environment: HF `transformers` + `torch` (one A100-40GB per arm),
 `NousResearch/Meta-Llama-3.1-8B-Instruct`, `RLHFlow/ArmoRM-Llama3-8B-v0.1`,

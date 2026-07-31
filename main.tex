@@ -215,8 +215,10 @@ that softening gives up.
   \item \emph{Detection after candidate separation.} The base detector lifts
         through a union test over candidate subkeys: an $O(\sqrt{\log N})$
         statistical threshold penalty --- order-optimal for index-blind
-        detection --- plus $N$ parallel base-detector evaluations
-        (\S\ref{sec:detection}).
+        detection --- plus $N$ parallel base-detector evaluations. The null
+        law of the union statistic is exact at every text length, and the
+        penalty, measured per token, vanishes as $O(T^{-1/2})$ with text
+        length $T$ (Theorem~\ref{thm:vanish}, \S\ref{sec:detection}).
   \item \emph{Validation across selectors and watermark families.} Across
         hard/soft/Exp Best-of-$N$, rejection sampling, filter-and-sample, and
         stress selectors, candidate separation restores the reward and
@@ -536,6 +538,50 @@ $o(1)$ relative to the $\sqrt{T}\,\Delta$ signal
 the selected candidate's index --- an audit log of the selection, at no extra cost
 (cf.\ message decoding in multi-bit watermarking \citealp{fernandez2023three}).
 
+The correction is a once-per-sequence quantity while the signal accrues per
+token, and this asymmetry can be made precise. On the null side no
+approximation is needed at all; on the signal side the cost, measured per
+token, vanishes with text length:
+
+\begin{theorem}[Vanishing per-token cost of index-blind detection]\label{thm:vanish}
+Fix $N$ and $\alpha\in(0,\tfrac12]$, and let the standing assumptions and
+the signal model above hold. Let $z_i=\Phi^{-1}(1-p_i)$ be the reported
+single-key z-scores and $z_{\mathrm{union}}=\Phi^{-1}\!\big(1-\min(1,N\min_i p_i)\big)$.
+\textbf{(i) (Exact null; extreme-value law.)} On unwatermarked text of
+\emph{any} length $T$, the $p_i$ are i.i.d.\ exactly uniform, so the $z_i$
+are i.i.d.\ exactly standard normal and $\max_i z_i$ has c.d.f.\
+$\Phi(z)^N$ at every finite $T$; as $N\to\infty$,
+$\sqrt{2\ln N}\,(\max_i z_i-b_N)$ converges to a standard Gumbel law with
+$b_N=\sqrt{2\ln N}-\tfrac{\ln\ln N+\ln4\pi}{2\sqrt{2\ln N}}$. The union
+test is exactly level-$\alpha$ at every $T$, with realized family-wise level
+$1-(1-\alpha/N)^N\uparrow1-e^{-\alpha}\ge\alpha-\alpha^2/2$: the
+Bonferroni correction is tight up to $O(\alpha^2)$, so the $\sqrt{2\ln N}$
+threshold is not an artifact of a loose union bound.
+\textbf{(ii) (Minimal detectable per-token signal.)} The smallest per-token
+score shift detectable at level $\alpha$ with power $1-\beta$ satisfies
+\[
+c^*_N(T)-c^*_1(T)\;\le\;\sigma_g\big(z_{\alpha/N}-z_\alpha\big)\,T^{-1/2}+o(T^{-1/2}),
+\qquad z_{\alpha/N}-z_\alpha\le\sqrt{2\ln(N/\alpha)},
+\]
+with $z_{\alpha/N}-z_\alpha=\sqrt{2\ln N}\,(1+o(1))$ as $N\to\infty$; by
+the needle-in-a-haystack lower bound this order is not improvable. Hence the
+per-token price of not knowing the index is $O\big(\sqrt{\ln N}\,T^{-1/2}\big)\to0$.
+\textbf{(iii) (Realized penalty on strong signals.)} If the correct-subkey
+z-score satisfies $z_T=\Theta_P(\sqrt T)\to\infty$, then
+\[
+z_T-z_{\mathrm{union}}\;=\;\frac{\ln N}{z_T}\,\big(1+o_P(1)\big)\;=\;\Theta_P\big(T^{-1/2}\big).
+\]
+Proof in Appendix~\ref{app:detection}.
+\end{theorem}
+
+At our operating point ($T\approx195$ scored tokens, $N{=}16$, signal
+$z\approx8$) part~(iii) predicts a penalty of $\ln16/8\approx0.35$
+z-scores; the observed gap between the shared-key arm's base-key z-score and
+the candidate-separated arm's union z-score is $\approx0.3$
+(Table~\ref{tab:main}), and the simulation of Figure~\ref{fig:detectors}
+confirms that the union detector tracks the correct-subkey oracle up to
+exactly this threshold shift.
+
 \begin{figure}[t]
 \begin{center}
 \includegraphics[width=0.98\linewidth]{figures/detector_comparison.pdf}
@@ -596,7 +642,10 @@ candidates, temperature $1.0$, ArmoRM reward; Gumbel/Aaronson watermark
 (context hash $h{=}4$). Arms: unwatermarked i.i.d.\ BoN (the matched
 independent-sampling reference); shared deterministic key;
 candidate-separated subkeys (ours) with union detection; the softened
-shared-key workaround of \citet{verma2025watermarking}. We report reward of the selected
+shared-key workaround of \citet{verma2025watermarking}; and the
+independent-key oracle --- one independently drawn, stored key per candidate,
+the exact tier of Theorem~\ref{thm:exactlift} --- with union detection over
+the stored keys. We report reward of the selected
 output under four selection heads (single, hard-BoN, soft-BoN, Exp-BoN), detection
 median $z$ and TPR, and calibration.
 
@@ -604,9 +653,10 @@ median $z$ and TPR, and calibration.
 \caption{Main result (LLaMA-3.1-8B-Instruct, $N{=}16$). The shared
 deterministic key forfeits the entire BoN gain; candidate-separated subkeys
 restore the unwatermarked Best-of-$N$ reference with the candidate marginal
-unchanged; union detection costs $\approx0.3$ z. The softened workaround
-trades away the exact marginal certification and retains less post-selection
-signal.}
+unchanged; union detection costs $\approx0.3$ z. The independent-key oracle
+(Theorem~\ref{thm:exactlift}'s exact tier) is statistically indistinguishable
+from the PRF realization. The softened workaround trades away the exact
+marginal certification and retains less post-selection signal.}
 \label{tab:main}
 \begin{center}
 \begin{tabular}{llccc}
@@ -621,6 +671,9 @@ Softened shared key & single & $0.0697$ & $7.09$ & $0.944$ \\
 \midrule
 Strict shared key & single & $0.0693$ & $8.00$ & $0.945$ \\
  & hard/soft/Exp-BoN & $0.0693$ & $8.00$ & $0.945$ \\
+\midrule
+Independent keys $+$ union (oracle) & single & $0.0701$ & $7.56$ & $0.926$ \\
+ & hard-BoN & $0.0858$ & $6.36$ & $0.883$ \\
 \midrule
 \textbf{Candidate-separated $+$ union (ours)} & single & $0.0698$ & $7.71$ & $0.926$ \\
  & hard-BoN & $\mathbf{0.0861}$ & $6.50$ & $0.891$ \\
@@ -646,7 +699,12 @@ recovery). In gain-retained terms
 ($(R_N{-}R_1)_{\mathrm{method}}/(R_N{-}R_1)_{\mathrm{unwm}}$): shared key
 $0\%$ [$0$--$0$], softened $107\%$ [$100$--$115$], candidate-separated
 $113\%$ [$106$--$121$] (Appendix~\ref{app:ci}) --- the latter two consistent
-with full recovery.
+with full recovery. The independent-key oracle run behaves identically:
+$16/16$ unique candidates, hard-BoN $0.0858$, paired difference to the PRF
+arm $-0.0003$ (CI $[-0.0015,0.0009]$) and to the unwatermarked reference
+$+0.0011$ (CI $[-0.0001,0.0023]$, containing zero) --- direct evidence that
+the compact-master-key realization matches the exact tier, and that small
+per-run excesses are key-realization noise.
 (3) \emph{Detection:} union costs $8.00\to7.71$ ($\approx0.3$ z); the subkey text is
 null under the base key ($0.057$ at the $0.05$ level) and the union FPR is
 calibrated ($0.055$/$0.012$ at $0.05$/$0.01$).
@@ -944,6 +1002,51 @@ $\sqrt T\,\Delta/\sigma_g>\sqrt{2\ln N}$ the maximum is attained by the correct
 subkey with probability $\to1$, which also gives (c).
 \end{proof}
 
+\begin{proof}[Proof of Theorem~\ref{thm:vanish}]
+\textbf{(i)} Under the null, every subkey's score sum is a continuous
+statistic with a known null law (independent of the key), so its exact
+upper-tail p-value $p_i$ is exactly $\mathrm{U}[0,1]$; across subkeys the
+$p_i$ are independent because distinct subkeys read disjoint PRF domains.
+Hence $z_i=\Phi^{-1}(1-p_i)$ are i.i.d.\ standard normal \emph{exactly},
+for every finite $T$, and $\max_i z_i$ has c.d.f.\ $\Phi^N$. The stated
+Gumbel limit with norming constants
+$a_N=(2\ln N)^{-1/2}$, $b_N=\sqrt{2\ln N}-\frac{\ln\ln N+\ln4\pi}{2\sqrt{2\ln N}}$
+is the Fisher--Tippett law for Gaussian maxima. The union test rejects iff
+$N\min_i p_i\le\alpha$, an event of exact probability
+$1-(1-\alpha/N)^N$, which is $\le\alpha$ (Bonferroni is exactly valid) and
+increases to $1-e^{-\alpha}\ge\alpha-\alpha^2/2$ as $N\to\infty$, so the
+union bound's slack is $O(\alpha^2)$ uniformly in $N$.
+\textbf{(ii)} Under a per-token location shift $c$, the correct-key
+z-statistic is asymptotically normal with mean $c\sqrt T/\sigma_g$ and unit
+variance. The union test's power is sandwiched between that of the
+correct-key test at level $\alpha/N$ (reject only when the correct subkey
+clears the corrected threshold) and the same plus the wrong-key
+contribution, which is at most $1-(1-\alpha/N)^{N-1}\le\alpha$; both
+bounds give a required mean of $z_{\alpha/N}+z_{\beta}+O(\alpha)+o(1)$,
+whereas the oracle ($N{=}1$) requires $z_\alpha+z_\beta+o(1)$. Solving
+$c\sqrt T/\sigma_g=\text{(required mean)}$ for $c$ gives the display. The
+Chernoff quantile bound $z_u\le\sqrt{2\ln(1/u)}$ for $u\le\tfrac12$
+(from $Q(z)\le e^{-z^2/2}$, $z\ge0$) with $u=\alpha/N$, together with
+$z_\alpha\ge0$ for $\alpha\le\tfrac12$, gives
+$z_{\alpha/N}-z_\alpha\le\sqrt{2\ln(N/\alpha)}$; the asymptotics follow
+from $z_{\alpha/N}=\sqrt{2\ln(N/\alpha)}(1+o(1))$. Order-optimality in $N$
+is the needle-in-a-haystack lower bound \citep{ingster1997,donoho2004higher}.
+\textbf{(iii)} The minimum over the $N-1$ wrong keys of i.i.d.\ uniform
+p-values is $\Theta_P(1/N)$, bounded away from zero for fixed $N$, while
+$p_{i^*}\to_P0$; so with probability $\to1$ the union statistic is
+$z_{\mathrm{union}}=\Phi^{-1}(1-Np_{i^*})$. Write $z=z_T$,
+$z'=z_{\mathrm{union}}$, $\delta=z-z'\ge0$. Mills-ratio bounds
+$\phi(z)(z^{-1}-z^{-3})\le Q(z)\le\phi(z)z^{-1}$ give
+$\ln Q(z)=-z^2/2-\ln z-\tfrac12\ln2\pi+O(z^{-2})$; substituting into
+$\ln Q(z')=\ln Q(z)+\ln N$ and expanding,
+\[
+z\delta-\tfrac{\delta^2}{2}+\ln\tfrac{z}{z'}=\ln N+O(z^{-2})
+\quad\Longrightarrow\quad
+\delta=\frac{\ln N}{z}\Big(1+O\big((1{+}\ln N)z^{-2}\big)\Big).
+\]
+With $z_T=\Theta_P(\sqrt T)$ this is $\Theta_P(T^{-1/2})$.
+\end{proof}
+
 \section{Experimental Details}\label{app:exp}
 
 \subsection{Configuration}
@@ -959,7 +1062,14 @@ $\sum_t\log\frac{1}{1-r_{x_t}}$ with exact $\Gamma(n,1)$ null; union arm reports
 $\min(1,N\cdot\min_i p_i)$. Selection heads: hard-BoN ($\arg\max$ reward),
 soft-/Exp-BoN ($\arg\max$ of $r/\lambda$ plus Gumbel/exponential noise,
 $\lambda{=}0.02$). BoN at $N<16$ uses repeated subsampling of the $16$ generated
-candidates ($60$--$80$ resamples per prompt). Wall-clock: generation
+candidates ($60$--$80$ resamples per prompt). The independent-key oracle arm
+draws $16$ salt keys once from OS randomness, stores them, and runs the
+\emph{unmodified} sampler with candidate $i$'s salt in the whole hash chain
+(no domain-separation step); its detector runs the base test under each
+stored key and applies the same Bonferroni union. Its null behavior on
+unwatermarked text matches the PRF union exactly (empirical FPR $0.062$ /
+$0.013$ at nominal $0.05$/$0.01$, $2048$ texts, vs.\ $0.062$/$0.013$ for the
+PRF union). Wall-clock: generation
 $\approx13.5$\,min per arm ($128\times16$ candidates, one GPU); union detection is
 $N$ single-key passes (embarrassingly parallel), $\approx4.5$\,min for
 $2048$ texts at $N{=}16$ on one GPU.
@@ -1194,6 +1304,8 @@ Cand.-separated & median $z$ (single / post-BoN) & $7.71$ / $6.47$ & $[7.04, 8.3
 & gain retained: shared key & $0\%$ & $[0\%, 0\%]$ \\
 & gain retained: softened & $107\%$ & $[100\%, 115\%]$ \\
 & gain retained: cand.-separated & $113\%$ & $[106\%, 121\%]$ \\
+& BoN: indep.-key oracle $-$ cand.-sep. & $-0.0003$ & $[-0.0015, 0.0009]$ \\
+& BoN: indep.-key oracle $-$ unwm & $+0.0011$ & $[-0.0001, 0.0023]$ \\
 \bottomrule
 \end{tabular}
 \end{table}
