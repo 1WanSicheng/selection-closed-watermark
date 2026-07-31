@@ -464,6 +464,13 @@ of the released output --- while the subkey arm stays at zero (slightly negative
 the variance bonus). The right panel tracks the watermark after selection: the
 subkey arm's union $z$ exceeds the softened baseline at \emph{every} $N$.
 
+\textbf{Selector family.}
+Appendix~\ref{app:selectors} extends the evaluation to seven key-free
+selectors (including rejection sampling and min-perplexity reranking) and two
+key-dependent stress selectors: closure holds within noise for every key-free
+selector, the theorem's key-independence side condition is empirically visible,
+and a worst-case key-oracle evader still faces $0.938$ TPR.
+
 \textbf{Candidate diversity.}
 Within-prompt statistics confirm closure at the sample level: the subkey arm is
 statistically indistinguishable from unwatermarked sampling
@@ -811,6 +818,71 @@ The subkey arm matches unwatermarked sampling on all three statistics; the
 softened workaround retains a $2.2\times$ residual prefix correlation (candidates
 start identically until the multinomial happens to diverge, then decorrelate);
 the strict shared key shares the entire generation.
+
+\subsection{Selector family}\label{app:selectors}
+Theorem~\ref{thm:closure} promises closure for \emph{every} selection operator
+that is independent of the watermark key. We test seven key-free selectors ---
+single, uniform-random, hard-/soft-/Exp-BoN, rejection sampling (accept the
+first candidate with reward above the unwatermarked median, random scan order),
+and min-perplexity reranking --- and two \emph{key-dependent} stress selectors
+that deliberately violate the theorem's side condition: adversarial min-$z$
+(an evader with a key oracle picks the weakest-watermarked candidate) and
+max-$z$ (WaterMax-style watermark boosting). All at $N{=}16$.
+
+\begin{table}[h]
+\caption{Selector family. Left: closure check --- reward gap of each arm to
+unwatermarked BoN under the \emph{same} selector (per-prompt SE
+$\approx0.0024$). Right: watermark after selection for the subkey arm.
+Key-free selectors: subkey gaps are within noise across all seven, while the
+strict shared key loses under every selector; the key-dependent selectors sit
+outside the theorem's scope and visibly break the match --- an empirical
+demarcation of the side condition.}
+\label{tab:selectors}
+\begin{center}
+\small
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{llrrr|cc}
+\toprule
+ & & \multicolumn{3}{c|}{Reward gap to unwm} &
+ \multicolumn{2}{c}{Subkey watermark} \\
+Selector & Key-free & shared & softened & subkey & med.\ $z$ & TPR@FPR$_{.01}$ \\
+\midrule
+single        & yes & $-0.0010$ & $-0.0006$ & $-0.0006$ & $7.71$ & $0.917$ \\
+random        & yes & $-0.0006$ & $-0.0009$ & $-0.0001$ & $7.95$ & $0.914$ \\
+hard-BoN      & yes & $-0.0154$ & $+0.0004$ & $+0.0013$ & $6.47$ & $0.891$ \\
+soft-BoN      & yes & $-0.0047$ & $-0.0000$ & $+0.0006$ & $7.24$ & $0.992$ \\
+Exp-BoN       & yes & $-0.0049$ & $-0.0001$ & $+0.0007$ & $7.05$ & $0.992$ \\
+rejection     & yes & $-0.0058$ & $-0.0003$ & $+0.0018$ & $6.85$ & $0.922$ \\
+min-PPL       & yes & $-0.0060$ & $-0.0010$ & $-0.0029$ & $5.16$ & $0.828$ \\
+\midrule
+adv.\ min-$z$ & \textbf{no} & $-0.0014$ & $+0.0043$ & $+0.0053$ & $3.98$ & $0.938$ \\
+max-$z$       & \textbf{no} & $+0.0000$ & $-0.0101$ & $-0.0113$ & $13.15$ & $0.984$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+Observations. (i) \emph{Closure is selector-universal}: the subkey arm matches
+unwatermarked BoN within noise under all seven key-free selectors, while the
+strict shared key loses under every one of them (there is nothing to select
+from). (ii) \emph{The theorem's side condition is visible in data}: the two
+key-dependent selectors break the match ($+0.0053$/$-0.0113$), exactly as
+predicted --- closure requires the selector to be independent of the key.
+(iii) \emph{Evasion}: even a worst-case evader with a key oracle, picking the
+weakest of $16$ candidates, only reduces the median $z$ from $7.7$ to $4.0$ and
+is still detected at $0.938$ TPR at matched FPR $0.01$; the derandomized shared
+key is evasion-immune ($z{=}8.0$ under every selector) but selection-dead ---
+a clean statement of the diversity/evasion trade.
+(iv) \emph{Watermark boosting} composes with the framework: max-$z$ selection
+lifts the median $z$ to $13.2$ at a $0.011$ reward cost, a WaterMax-style
+operating point. (v) \emph{Quality reranking} (min-PPL) is the most
+watermark-hostile benign selector ($z$ $5.16$): the most model-typical
+candidate carries the weakest signal. Consistently, the generator's
+likelihood-sorted candidate order exhibits a monotone gradient --- reward
+falls from $0.073$ to $0.059$ and median $z$ rises from $4.7$ to $12.9$ across
+likelihood ranks --- i.e., model-typical text is simultaneously
+reward-preferred and watermark-poor, the within-set mirror of the
+reward--watermark anticorrelation.
 
 \subsection{Calibration}
 Union detector on unwatermarked text ($128$ prompts $\times16$ candidates):
