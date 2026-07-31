@@ -67,27 +67,30 @@ selectors.
 \end{abstract}
 
 \section{Introduction}
-% Hook: inference-time compute is the norm; watermarks are certified sample-wise.
-Test-time alignment increasingly improves language-model outputs by generating
-multiple candidates and selecting among them: Best-of-$N$ selects by a reward
-model \citep{verma2025watermarking}, verifier-guided inference selects a
-verified solution, rejection sampling filters low-quality outputs, and
-self-consistency aggregates several reasoning traces. These methods obtain
-their gain from candidate diversity and from the joint structure of the
-candidate pool. Distortion-free watermarking, by contrast, is certified one
-generation at a time: averaged over the secret key, a \emph{single} watermarked
-sample follows the same law as the unwatermarked model
-\citep{aaronson2023, kuditipudi2023robust, zhao2024permute}. These two views do
-not automatically compose --- a marginal guarantee for each candidate does not
-determine the distribution produced after a selector observes all candidates.
-This paper asks:
+Distortion-free watermarking and inference-time selection address different
+goals. The former modifies generation while preserving its single-sample
+distribution \citep{aaronson2023, kuditipudi2023robust, zhao2024permute}; the
+latter improves alignment or reasoning by generating multiple candidates and
+selecting among them, as in Best-of-$N$ reward selection. Recent work has
+begun to combine the two --- for example, using Best-of-$N$ to recover the
+alignment quality degraded by watermarking \citep{verma2025watermarking} ---
+but their distributional compatibility is not understood.
+
+A distortion-free guarantee is typically \emph{marginal}: one watermarked
+output, averaged over the secret key, follows the unwatermarked distribution.
+Best-of-$N$, however, is a \emph{joint} procedure: its behavior depends not
+only on the marginal law of each candidate but also on their dependence. This
+raises a basic compositional question:
 \begin{center}
-\emph{When does a distortion-free watermark compose correctly with
-Best-of-$N$ and other test-time selectors?}
+\emph{Does marginal distortion-freeness suffice once a selector observes
+multiple watermarked candidates?}
 \end{center}
-We show that for the deterministic context-hashed scheme family commonly
-studied and used in current watermarking systems, it does not --- the entire
-test-time alignment gain can vanish --- and that a minimal lift restores it.
+We show that it does not. Under a shared deterministic key stream, all
+candidates can collapse to a single output, eliminating the entire
+Best-of-$N$ gain; more generally, exact candidate marginals can coexist with
+a correlated joint law that changes the selected-output distribution. A
+minimal, scheme-agnostic change --- candidate-specific keys --- restores the
+guarantee at the selection level.
 
 \textbf{The collapse.} In context-hashed deterministic schemes (Gumbel/Aaronson-style,
 KGW derivatives, SynthID-Text), the per-step noise is a pseudorandom function of the
@@ -112,30 +115,36 @@ restores diversity but breaks the exact marginal certification it was meant to
 protect, and we show it worsens the reward--detection--distribution trade-off
 relative to our construction.
 
-\textbf{From candidate diversity to selection correctness.} It is well known
-that deterministic decoding with reused randomness reduces candidate diversity
-\citep{verma2025watermarking}. Our focus is different: we ask whether the
-\emph{distributional guarantee} of a distortion-free watermark survives a
-downstream selector, which requires reasoning about the joint candidate law,
-not only about whether candidates happen to be distinct. We show that (i)
-exact marginals can still yield a biased post-selection distribution, with the
-worst-case shift approaching $\mathrm{TV}=\tfrac12$; (ii) joint preservation
-is exactly the condition needed for selector-universal closure; and (iii)
-candidate-separated randomness restores the reference behavior for
-Best-of-$N$, reranking, rejection sampling, and other key-independent
-selectors, at an order-optimal detection cost.
+\textbf{Why the composition matters.} The importance of the question is
+structural, not a claim about how widely any one pipeline is used. First, the
+Best-of-$N$ gain is a property of the \emph{joint} candidate law: for
+equicorrelated rewards the expected maximum grows as
+$\mu+\sigma\sqrt{1-\rho}\,m_N$ (Lemma~\ref{lem:attenuation}), so a watermark
+that changes candidate dependence changes the test-time scaling law itself,
+even when every marginal is exact. Second, the claim ``does not change the
+generation distribution'' becomes ambiguous under selection: it may mean that
+each \emph{candidate} is unchanged, that the candidate \emph{pool} is
+unchanged, or that the \emph{selected output} is unchanged. Marginal
+distortion-freeness delivers only the first; this paper delimits which of the
+three a given scheme actually provides. Third, the failure grows with
+inference-time compute: under a shared key additional candidates add nothing,
+and under partial correlation the gap to independent Best-of-$N$ widens with
+$N$. Watermarking can thus change how model performance \emph{scales} with
+inference-time compute.
 
-\textbf{Why this is not merely a seeding issue.} Assigning different
-randomness to different candidates is an operationally natural fix, but it
-does not answer the underlying question: \emph{what property must a
-watermarked candidate pool satisfy so that an arbitrary inference-time
-selector behaves as it would on unwatermarked samples?} The issue persists
-beyond complete stream reuse --- any dependence among candidates can alter the
-output of a reward-based selector while leaving every marginal unchanged
-(Lemma~\ref{lem:attenuation} quantifies the attenuation). Our contribution is
-to identify and characterize the required joint guarantee;
-candidate-specific domain separation is then the minimal construction that
-realizes it.
+\textbf{Not merely a diversity or seeding issue.} It is well known that
+deterministic decoding with reused randomness reduces candidate diversity
+\citep{verma2025watermarking}, and assigning different randomness to
+different candidates is an operationally natural fix. Neither observation
+answers the underlying question: \emph{what property must a watermarked
+candidate pool satisfy so that an arbitrary inference-time selector behaves
+as it would on unwatermarked samples?} The issue persists beyond complete
+stream reuse --- any dependence among candidates can alter the output of a
+reward-based selector while leaving every marginal unchanged --- and
+distinctness of candidates alone does not give a correct selected-output
+distribution. Our contribution is to identify and characterize the required
+joint guarantee; candidate-specific domain separation is then the minimal
+construction that realizes it.
 
 \textbf{Formalization.} We define \emph{$N$-selection-closed} distortion-freeness:
 the joint distribution of the $N$ candidates (and hence of the output of \emph{any}
@@ -178,9 +187,10 @@ single-sample reward matching
 the unwatermarked model ($0.0698$ vs.\ $0.0703$; the candidate marginal is
 unchanged);
 (iii) union detection retains $z=7.71$ vs.\ $8.00$ for the shared key;
-(iv) the softened workaround is dominated on all three axes simultaneously
-(reward $0.0861$ vs.\ $0.0852$; post-BoN detection $z$ $6.50$ vs.\ $5.62$; strict
-vs.\ broken distortion-freeness).
+(iv) relative to the softened workaround, candidate separation attains equal
+or better reward ($0.0861$ vs.\ $0.0852$) and stronger post-BoN detection
+($z$ $6.50$ vs.\ $5.62$) while preserving the exact marginal certification
+that softening gives up.
 
 \textbf{Contributions.}
 \begin{enumerate}
@@ -218,44 +228,42 @@ vs.\ broken distortion-freeness).
 \section{Related Work}\label{sec:related}
 \textbf{Distortion-free watermarking.}
 Gumbel/exponential schemes \citep{aaronson2023}, inverse-transform and robust
-variants \citep{kuditipudi2023robust}, permute-and-flip \citep{zhao2024permute},
-and semantic-level schemes \citep{pmark2025} certify a single-sample
-(or key-averaged) distributional guarantee. SynthID-Text \citep{dathathri2024scalable}
-deploys the context-hash family at scale with repeated-context masking, which
-addresses intra-sequence reuse, not cross-candidate correlation.
-
-\textbf{Key reuse and collisions.}
-\citet{keycollision2024} prove that key collisions across generations induce
-correlations and break distortion-freeness of the \emph{generated} text distribution.
-Our setting is the extreme collision --- $N$ candidates for one prompt collide at
-every step --- and our observation is one level higher: a \emph{selection operator}
-converts joint correlation into first-order bias of the \emph{post-selection output}.
-The random-offset construction of \citet{kuditipudi2023robust} decorrelates
-candidates approximately, at the cost of alignment-based (edit-distance) detection;
-our fix keeps the strong context-hash detectors.
-
-\textbf{Selection and watermarks.}
-Alignment Resampling \citep{verma2025watermarking} uses reward-based BoN on
-watermarked models and explicitly sacrifices exact marginal
-distortion-freeness for
-diversity; we show this workaround is dominated. WaterMax
-\citep{giboulot2024watermax} and WaterSearch \citep{watersearch2025} use
-multi-draft selection \emph{for} the watermark (choosing drafts by watermark score),
-the dual of our setting; WaterSearch also employs per-candidate seeds as a mechanism,
-without a selection-closure analysis. Multi-bit watermarking decodes a message by
-running detection under every message key and taking the best p-value
-\citep{fernandez2023three}; our union wrapper inherits this standard practice.
-Unlike this line of work, we propose no new watermarking scheme: our object of
-study is the \emph{transform} that any keyed scheme composes with, and its
-guarantees are proved once for all schemes and selectors.
-
-\textbf{Undetectability.}
-\citet{christ2023undetectable} construct watermarks that are computationally
-undetectable under adaptive multi-query access, which implies selection-closure
-computationally; the construction is not practical to instantiate. Our notion is
-the minimal targeted property, and our lift upgrades the context-hash family in
-place
+variants \citep{kuditipudi2023robust}, permute-and-flip
+\citep{zhao2024permute}, and semantic-level schemes \citep{pmark2025} certify
+a single-sample (or key-averaged) distributional guarantee: one watermarked
+output, averaged over the key, follows the unwatermarked law. SynthID-Text
+\citep{dathathri2024scalable} deploys the context-hash family at scale with
+repeated-context masking, which addresses intra-sequence reuse, not
+cross-candidate correlation. At the strong end of the guarantee spectrum,
+\citet{christ2023undetectable} construct computationally \emph{undetectable}
+watermarks; undetectability implies selection-closure computationally but has
+no practical instantiation, whereas the property we isolate is strictly
+weaker and is reached by existing decoders through a key-management change
 (Proposition~\ref{prop:hierarchy}).
+
+\textbf{Multi-candidate watermarking and alignment.}
+A small number of works combine watermarked generation with multiple
+candidates. Alignment Resampling \citep{verma2025watermarking} uses
+reward-based Best-of-$N$ to recover the alignment quality lost to
+watermarking, softening the sampler with fresh randomness and thereby giving
+up the exact marginal guarantee. WaterMax \citep{giboulot2024watermax} and
+WaterSearch \citep{watersearch2025} make selection part of the watermark
+itself, choosing among drafts by watermark score (WaterSearch also uses
+per-candidate seeds as a mechanism, without a distributional analysis of the
+resulting candidate pool). \citet{keycollision2024} show that key collisions
+across generations induce correlations that break distortion-freeness of the
+generated \emph{text}; they study the text distribution, not an external
+selector. Multi-bit watermarking \citep{fernandez2023three} runs detection
+under every message key and takes the best p-value --- the technical
+precedent for our union detector. Prior work thus either uses selection to
+improve watermark strength, or uses selection to recover quality under a
+watermarked sampler. We instead study whether the distortion-free
+\emph{guarantee itself} is preserved when an external alignment or
+inference-time selector acts on multiple watermarked candidates, and which
+joint property makes it so. The random-offset construction of
+\citet{kuditipudi2023robust} decorrelates candidates approximately, at the
+cost of moving to alignment-based (edit-distance) detection; candidate
+separation keeps the strong context-hash detectors.
 
 \section{When Watermarking Eliminates Test-Time Scaling}\label{sec:collapse}
 
