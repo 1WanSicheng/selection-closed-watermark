@@ -626,15 +626,46 @@ Table~\ref{tab:suite} reports the complete detection suite for the selected
 output (hard-BoN, $N{=}16$) and for single samples: median $z$, TPR at nominal
 $p<0.05/0.01$, the matched detector's FPR on unwatermarked text, AUROC, F1 at
 $p<0.05$, the length-normalized ANLPPT ($-\ln p$ per token), and median
-perplexity under the generating model. Notes: (i) the union detector's
-Bonferroni correction is conservative --- its realized FPR is $0.039/0.008$ at
-nominal $0.05/0.01$ --- so at fixed \emph{nominal} thresholds the subkey arm's
-TPR is slightly below the softened baseline despite a higher median $z$; at
-matched \emph{realized} FPR the comparison tilts further toward the subkey arm.
+perplexity under the generating model. Notes: (i) at \emph{nominal} thresholds
+the two detectors are miscalibrated in opposite directions --- the union's
+Bonferroni correction is conservative (realized FPR $0.039/0.008$ at nominal
+$0.05/0.01$) while the softened baseline's analytic null is anti-conservative
+on real text (realized FPR $0.062/0.016$, i.e.\ $1.6\times$ nominal) --- so
+nominal-threshold TPRs are not comparable across arms.
 (ii) The strict decoder embeds a visibly stronger per-token signal than the
 softened sampler (single-sample ANLPPT $0.255$ vs.\ $0.201$), which survives
 selection ($0.154$ vs.\ $0.137$). (iii) Perplexity is preserved throughout
 (subkey $3.9/3.5$ vs.\ unwatermarked $3.8/3.3$, single/BoN).
+
+\paragraph{Matched-FPR comparison (exact empirical calibration).}
+The fair comparison sets each detector's threshold at the empirical quantile of
+its \emph{own} null (unwatermarked text under the same detector), so both arms
+are evaluated at identical realized FPR. Since the $N$ subkey scores on a given
+text are independent, the union null is exactly calibratable; empirical
+calibration additionally absorbs the finite-text slack of the analytic
+$\Gamma$-null. For the selected output (hard-BoN, $N{=}16$):
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+Arm (selected output) & TPR@FPR$=.05$ & TPR@FPR$=.01$ & TPR@FPR$=.001$ \\
+\midrule
+Softened shared key & $\mathbf{0.948}$ & $0.882$ & $0.866$ \\
+Strict subkey $+$ union (ours) & $0.930$ & $\mathbf{0.891}$ & $\mathbf{0.883}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Under honest calibration the softened baseline's apparent nominal-threshold
+advantage disappears: its TPR@$.01$ drops from $0.909$ to $0.882$ (its nominal
+threshold had operated at FPR $0.016$), while ours is unchanged
+($0.891$). At the strict operating points that matter for deployment
+(FPR $10^{-2}$, $10^{-3}$) the subkey arm leads, and its ROC degrades more
+gracefully as the threshold tightens ($0.930\!\to\!0.883$ vs.\
+$0.948\!\to\!0.866$) --- the payoff of the stronger median signal
+($z$ $6.50$ vs.\ $5.62$). At the loose $0.05$ point the softened arm retains a
+small edge from the union's heavier max-of-$N$ null tail.
 
 \begin{table}[h]
 \caption{Full metric suite (LLaMA-3.1-8B-Instruct; selected $=$ hard-BoN
