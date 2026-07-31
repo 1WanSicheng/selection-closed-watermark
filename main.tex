@@ -21,8 +21,8 @@
 \newcommand{\dftext}{distortion-free}
 \newcommand{\Ecal}{\mathcal{E}}
 
-\title{Distortion-Free Until You Select:\\
-Watermarking under Best-of-$N$ Inference}
+\title{Distortion-Free Until You Select: A General Framework for\\
+Jointly-Coupled Watermarking under Inference-Time Selection}
 
 % Anonymized for submission
 \author{Anonymous authors\\
@@ -48,14 +48,19 @@ identical copies, so BoN forfeits its entire alignment gain; the practical worka
 --- softening the sampler --- restores diversity but sacrifices the distortion-free
 property that motivated the scheme. We formalize \emph{$N$-selection-closed}
 distortion-freeness, prove that marginal preservation is insufficient while joint
-preservation is sufficient for \emph{any} selection operator, and give a minimal
-construction: derive per-candidate subkeys from a single master key by cryptographic
-domain separation, and detect with a union detector over the $N$ subkeys. The
-construction restores the full BoN reward gain of unwatermarked sampling
-(reward $0.0861$ vs.\ ceiling $0.0848$ on LLaMA-3.1-8B-Instruct) while remaining
-strictly distortion-free, and the union detector costs only $\approx 0.3$ z-score
-(Bonferroni over $N{=}16$). It Pareto-dominates the deployed softened workaround on
-reward, detection, and distributional correctness simultaneously.
+preservation is sufficient for \emph{any} selection operator, and give a
+\emph{general lifting}, not another watermarking algorithm: the jointly-coupled
+transform $\mathrm{JC}_N$ compiles \emph{any} keyed watermarking scheme into a
+selection-closed one by domain-separated per-candidate subkeys under a single
+master key, and lifts the scheme's own detector by a union wrapper whose cost is
+a once-per-sequence $\sqrt{2\ln N}$ threshold shift. The guarantees are
+scheme-agnostic and selector-agnostic. Instantiated on the deployed
+Gumbel/Aaronson scheme, the lifted system restores the full BoN reward gain of
+unwatermarked sampling (reward $0.0861$ vs.\ ceiling $0.0848$ on
+LLaMA-3.1-8B-Instruct) while remaining strictly distortion-free, retains
+detection at $\approx0.3$ z-score cost, and Pareto-dominates the deployed
+softened workaround on reward, detection, and distributional correctness
+simultaneously.
 \end{abstract}
 
 \section{Introduction}
@@ -100,23 +105,29 @@ deployed weak guarantee and cryptographic undetectability
 \citep{christ2023undetectable}, which implies it computationally but has no deployed
 instantiation (Proposition~\ref{prop:hierarchy}).
 
-\textbf{Construction.} Restore candidate independence by \emph{domain separation}:
-derive $\mathrm{SubKey}_i = \mathrm{PRF}(\mathrm{MasterKey}, \mathrm{ctx} \,\|\, i)$
-for candidate $i$. The user keeps one master key; the joint candidate distribution
-becomes (pseudo-)i.i.d., closure follows, and the strict argmax decoder can be used
-again --- no softening. Detection needs only the number of candidates $N$ (or an
-upper bound), not the selected index: a \emph{union detector} runs the single-key
-test under each subkey and Bonferroni-corrects, paying a once-per-sequence
-threshold penalty of $\sqrt{2\ln N}$ --- empirically $0.3$ z-score at $N{=}16$
-against a signal of $z\approx 7.7$ --- and recovering the winning candidate's index
-as a free audit log. We also analyze the column-max \emph{aggregate} detector
-(the right fallback when $N$ is unknown or outputs are block-composed): its null is
-\emph{exactly} calibrated by Gumbel max-stability, but its per-token signal
-contracts in closed form from $\Delta$ to $\ln(1+(e^{\Delta}-1)/N)$
-(Proposition~\ref{prop:aggregate}, verified to machine precision,
-Figure~\ref{fig:detectors}) --- a per-token $\ln N$ dilution that collapses in the
-low-entropy regime. The two detectors are thus separated by a per-sequence
-$\sqrt{2\ln N}$ versus a per-token $\ln N$.
+\textbf{Framework.} We emphasize what this paper is \emph{not}: it proposes no
+new watermarking algorithm. Instead we give a scheme-agnostic \emph{lifting},
+the jointly-coupled transform $\mathrm{JC}_N$: given any keyed sampler $W$
+whose per-step randomness is a pseudorandom function of its key, candidate $i$
+runs $W$ unmodified under
+$\mathrm{SubKey}_i=\mathrm{PRF}(\mathrm{MasterKey},\,i)$. One master key is
+kept; the $N$ candidates become (computationally) i.i.d.\ copies of $W$'s
+single-sample law, so whatever marginal guarantee $W$ has is inherited
+\emph{jointly} --- in particular, marginally distortion-free $W$ becomes
+$N$-selection-closed (Theorem~\ref{thm:lifting}), for every selection operator.
+Detection lifts the same way: the \emph{union wrapper} runs $W$'s own detector
+under each subkey (only $N$, or an upper bound, need be known --- not the
+selected index), paying a once-per-sequence threshold penalty of
+$\sqrt{2\ln N}$ --- empirically $0.3$ z-score at $N{=}16$ against a signal of
+$z\approx7.7$ --- and recovering the winning candidate's index as a free audit
+log. For max-stable score families (Gumbel/exponential) we additionally analyze
+a column-max \emph{aggregate} detector (the right fallback when $N$ is unknown
+or outputs are block-composed): its null is \emph{exactly} calibrated, but its
+per-token signal contracts in closed form from $\Delta$ to
+$\ln(1+(e^{\Delta}-1)/N)$ (Proposition~\ref{prop:aggregate}, verified to
+machine precision, Figure~\ref{fig:detectors}) --- a per-token $\ln N$ dilution
+that collapses in the low-entropy regime. The two detectors are thus separated
+by a per-sequence $\sqrt{2\ln N}$ versus a per-token $\ln N$.
 
 \textbf{Results.} On LLaMA-3.1-8B-Instruct with HH-RLHF prompts and an ArmoRM reward:
 (i) strict shared-key BoN returns identical candidates and zero BoN gain;
@@ -137,12 +148,16 @@ vs.\ broken distortion-freeness).
         insufficient and joint preservation sufficient for any selector, and place
         the notion in a hierarchy between marginal distortion-freeness and
         undetectability (\S\ref{sec:theory}).
-  \item We give the minimal construction (domain-separated subkeys, one master key)
-        and a detection theory: union vs.\ aggregate detectors with a
-        per-sequence $\sqrt{2\ln N}$ vs.\ per-token $\log N$ cost separation
-        (\S\ref{sec:method}).
-  \item Experiments on a real aligned model show full recovery of the BoN gain at
-        strict distortion-freeness, and strict dominance over the deployed softened
+  \item We give the general jointly-coupled transform $\mathrm{JC}_N$ --- a
+        compiler that lifts \emph{any} keyed watermarking scheme to a
+        selection-closed one under a single master key
+        (Theorem~\ref{thm:lifting}) --- together with a lifted detection theory:
+        the scheme-agnostic union wrapper vs.\ the family-specific aggregate
+        detector, separated by a per-sequence $\sqrt{2\ln N}$ vs.\ per-token
+        $\log N$ cost (\S\ref{sec:method}).
+  \item Instantiating the framework on the deployed Gumbel/Aaronson scheme, a
+        real aligned model shows full recovery of the BoN gain at strict
+        distortion-freeness, and strict dominance over the deployed softened
         workaround (\S\ref{sec:experiments}).
 \end{enumerate}
 
@@ -174,8 +189,11 @@ multi-draft selection \emph{for} the watermark (choosing drafts by watermark sco
 the dual of our setting; WaterSearch also employs per-candidate seeds as a mechanism,
 without a selection-closure analysis. Multi-bit watermarking decodes a message by
 running detection under every message key and taking the best p-value
-\citep{fernandez2023three}; our union detector inherits this standard practice, and
+\citep{fernandez2023three}; our union wrapper inherits this standard practice, and
 our analysis contributes the cost separation against aggregate detection.
+Unlike this line of work, we propose no new watermarking scheme: our object of
+study is the \emph{transform} that any keyed scheme composes with, and its
+guarantees are proved once for all schemes and selectors.
 
 \textbf{Undetectability.}
 \citet{christ2023undetectable} construct watermarks that are computationally
@@ -258,19 +276,59 @@ undetectability. In particular, undetectability under adaptive queries
 and the deployed context-hash family satisfies the first but not the second.
 \end{proposition}
 
-\section{Method: Subkeys and Union Detection}\label{sec:method}
-\subsection{Domain-separated subkeys}
-Candidate $i$ uses
-$\mathrm{SubKey}_i=\mathrm{PRF}(\mathrm{MasterKey},\,\mathrm{ctx}\,\|\,i)$;
-one master key is stored, the derivation is free, and the $N$ noise streams are
-computationally independent. Under PRF security the candidate tuple is
-indistinguishable from i.i.d.\ samples, so Theorem~\ref{thm:closure} applies.
-As a byproduct, the strict (argmax) decoder can be used again --- no softening ---
-so each candidate individually regains the exact single-sample guarantee.
+\section{The Jointly-Coupled Watermarking Framework}\label{sec:method}
+This section is deliberately scheme-agnostic: we define a transform on
+\emph{arbitrary} keyed watermarking schemes and prove its guarantees once, for
+all schemes and all selectors. No new watermarking algorithm is introduced;
+existing schemes are lifted unmodified.
+
+\subsection{The $\mathrm{JC}_N$ transform}
+A \emph{keyed sampler} $W$ is any watermarked decoder whose per-step randomness
+is a deterministic (pseudorandom) function of a key $k$ and the generation
+state, e.g., context-hash Gumbel/Aaronson, exponential/inverse-transform
+sampling, tournament sampling, or biased-logit schemes. The
+\emph{jointly-coupled lift} $\mathrm{JC}_N(W)$ generates candidate
+$i\in[N]$ by running $W$ \emph{unmodified} under the domain-separated subkey
+$\mathrm{SubKey}_i=\mathrm{PRF}(\mathrm{MasterKey},\,i)$. One master key is
+stored; the derivation is free.
+
+\begin{theorem}[Lifting]\label{thm:lifting}
+Let $W$ be a keyed sampler with single-sample (key-averaged) output law $\mu_W$.
+Then, under PRF security:
+(a) the $N$ candidates of $\mathrm{JC}_N(W)$ are computationally
+indistinguishable from $N$ i.i.d.\ draws of $\mu_W$ --- for \emph{any} base
+scheme $W$, distortion-free or not;
+(b) if $W$ is marginally distortion-free ($\mu_W=Q$), then $\mathrm{JC}_N(W)$
+is $N$-selection-closed, and by Theorem~\ref{thm:closure} the released output
+under \emph{any} selection operator is distributed as unwatermarked
+Best-of-$N$;
+(c) any detector for $W$ lifts to a detector for $\mathrm{JC}_N(W)$ (the union
+wrapper of \S\ref{sec:detection}) with a once-per-sequence multiplicity cost.
+\end{theorem}
+\begin{proof}[Proof sketch]
+(a) Domain separation makes the $N$ noise streams jointly indistinguishable
+from independent streams; each candidate is then an independent run of $W$,
+whose output law is $\mu_W$. (b) i.i.d.\ with marginal $Q$ is precisely
+Definition~\ref{def:closure}. (c) is Proposition~\ref{prop:union}. Full proof
+in Appendix~\ref{app:proofs}. \qedhere
+\end{proof}
+
+Part (a) is worth emphasizing: even for schemes that are \emph{not}
+distortion-free (e.g., biased-logit families), the lift restores candidate
+i.i.d.-ness, so selection behaves as ordinary Best-of-$N$ over the scheme's
+marginal --- removing the selection-induced pathology while leaving the
+scheme's own marginal bias unchanged. For distortion-free $W$, part (b) is the
+full closure guarantee. As a byproduct, strict (argmax) decoders can be used
+again --- no softening --- so each candidate individually retains the exact
+single-sample guarantee.
 
 \subsection{Detection: union vs.\ aggregate}\label{sec:detection}
 The verifier knows the master key and $N$ (an upper bound suffices), not the
-selected index. We analyze two detectors under a location-shift signal model:
+selected index. The \emph{union wrapper} is scheme-agnostic --- it runs the base
+scheme's own detector under each derived subkey --- while the \emph{aggregate}
+variant exploits max-stability and is specific to Gumbel-family scores, which we
+adopt below for concreteness. We analyze both under a location-shift signal
+model:
 at a watermarked token the correct subkey's score is
 $\mathrm{Gumbel}(\Delta,1)$, where $\Delta$ is the per-token signal (for uniform
 logits over a nucleus of size $V$, exactly $\Delta=\ln V$; in general $\Delta$
@@ -325,8 +383,27 @@ $N$ grows.}
 \label{fig:detectors}
 \end{figure}
 
+\subsection{Instantiations}\label{sec:instantiations}
+The framework specializes with no per-scheme work.
+\emph{Gumbel/Aaronson} (our flagship, \S\ref{sec:experiments}): candidate $i$
+runs strict argmax decoding with noise seeded by
+$(\mathrm{SubKey}_i,\mathrm{ctx})$; the union wrapper reuses the standard
+$\Gamma$-null detector; the aggregate detector applies since the score family
+is max-stable.
+\emph{Exponential / permute-and-flip samplers} \citep{zhao2024permute}: identical
+treatment --- the noise is the same exponential family, so both detectors carry
+over verbatim.
+\emph{Inverse-transform / random-offset schemes} \citep{kuditipudi2023robust}:
+the lift replaces the random offset's approximate decorrelation with exact
+(computational) independence while keeping their alignment detector per subkey.
+\emph{Biased-logit schemes} (KGW): Theorem~\ref{thm:lifting}(a) applies ---
+candidates become i.i.d.\ over the biased marginal, restoring ordinary BoN
+behavior; closure in the sense of (b) is vacuous since the base scheme is not
+distortion-free.
+
 \section{Experiments}\label{sec:experiments}
-\textbf{Setup.} LLaMA-3.1-8B-Instruct, HH-RLHF prompts ($128$), $N{=}16$
+\textbf{Setup.} We instantiate $\mathrm{JC}_N$ on the deployed Gumbel/Aaronson
+scheme. LLaMA-3.1-8B-Instruct, HH-RLHF prompts ($128$), $N{=}16$
 candidates, temperature $1.0$, ArmoRM reward; Gumbel/Aaronson watermark
 (context hash $h{=}4$). Arms: unwatermarked i.i.d.\ BoN (ceiling); strict
 shared-key; strict subkey (ours) with union detection; the softened shared-key
@@ -431,10 +508,12 @@ which is an orthogonal, entropy-driven phenomenon. Intra-sequence key reuse
 \section{Conclusion}
 Distortion-freeness, as certified, is a single-sample property; deployment is a
 selection property. The gap is real (the entire BoN gain), the formalization is
-simple ($N$-selection-closedness), the fix is one line (domain-separated subkeys),
-and the detection cost is negligible (union, $\sqrt{2\ln N}$ once per sequence).
-Watermarks should be certified --- and can now be constructed --- to be
-distortion-free \emph{after} you select.
+simple ($N$-selection-closedness), and the remedy is not another watermarking
+algorithm but a general compiler: $\mathrm{JC}_N$ lifts any keyed scheme ---
+existing detectors included --- to selection-closedness under one master key,
+at a once-per-sequence $\sqrt{2\ln N}$ detection cost. Watermarks should be
+certified --- and can now be mechanically lifted --- to be distortion-free
+\emph{after} you select.
 
 \bibliography{refs}
 \bibliographystyle{iclr2025_conference}
@@ -515,6 +594,25 @@ response collisions at a rate far exceeding that of genuine sampling --- a
 polynomial-time, key-free distinguisher. (This is a property of the entire
 context-hash family, orthogonal to our fix.) Hence the inclusion is strict.
 \qed
+
+\subsection{Proof of Theorem~\ref{thm:lifting}}
+\textbf{(a)} All subkeys are evaluations of one PRF at distinct points
+$(\mathrm{MasterKey},i)$, $i\in[N]$; by PRF security the tuple of derived noise
+streams is computationally indistinguishable from $N$ independent truly-random
+streams (a single invocation of the PRF game over the $N$ query points; no
+hybrid over candidates is needed). Conditioned on independent streams, the
+candidates are independent runs of the unmodified base sampler $W$, hence
+i.i.d.\ with law $\mu_W$; a distinguisher against the candidate tuple would
+therefore distinguish the streams, contradicting PRF security. Note that (a)
+makes no assumption on $W$ beyond keyed-ness --- in particular no
+distortion-freeness.
+\textbf{(b)} If $\mu_W=Q_x$ for every prompt, then i.i.d.\ with marginal $Q_x$
+is precisely Definition~\ref{def:closure}, and Theorem~\ref{thm:closure} yields
+closure under every selection operator.
+\textbf{(c)} The base detector's null is exact under each wrong subkey (the
+text is independent of that subkey's stream), so the union wrapper of
+Proposition~\ref{prop:union} applies verbatim, with its once-per-sequence
+multiplicity cost and index-recovery byproduct. \qed
 
 \subsection{Detection under $N$ subkeys}\label{app:detection}
 We work in the location-shift signal model of \S\ref{sec:detection}: token
