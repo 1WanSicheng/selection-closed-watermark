@@ -311,22 +311,26 @@ shift at zero. The shared-key deterministic scheme is the $\rho\to1$
 \section{$N$-Selection-Closed Distortion-Freeness}\label{sec:theory}
 
 \begin{definition}[$N$-selection-closed]\label{def:closure}
-A watermarked sampler is \emph{$N$-selection-closed} \dftext{} if the joint law of
-its $N$ candidates equals (or is computationally indistinguishable from) the joint
-law of $N$ i.i.d.\ unwatermarked samples, for every prompt.
+A watermarked sampler is \emph{exactly $N$-selection-closed} \dftext{} if, for
+every prompt $x$, the joint law of its $N$ candidates equals
+$Q_x^{\otimes N}$, the law of $N$ i.i.d.\ unwatermarked samples. It is
+\emph{computationally} $N$-selection-closed if the two joint laws are
+computationally indistinguishable. Statements below are for the exact notion;
+each transfers verbatim to the computational one by composing the
+distinguisher with the (efficient) selector.
 \end{definition}
 
-Throughout, selection operators observe the candidates and auxiliary
-randomness independent of the watermark key; base samplers draw all their
-randomness from the keyed noise stream; the verifier knows $N$ or an upper
-bound.
+\textbf{Standing assumptions.} Selection operators observe the candidates and
+auxiliary randomness independent of the watermark key; base samplers depend on
+their key only through the keyed noise stream; the verifier knows $N$ or an
+upper bound.
 
 \begin{theorem}[Characterization of selection-closure]\label{thm:closure}
 The following are equivalent:
 (i) the joint law of the candidates equals $Q_x^{\otimes N}$ for every prompt;
-(ii) for \emph{every} (possibly randomized) selection operator $S$ as above,
-the law of the selected output $Y_S$ equals that of $S$ applied to
-unwatermarked i.i.d.\ candidates.
+(ii) for \emph{every} (possibly randomized) selection operator $S$ satisfying
+the standing assumptions, the law of the selected output $Y_S$ equals that of
+$S$ applied to unwatermarked i.i.d.\ candidates.
 Moreover, marginal preservation alone does not imply (ii) for any $N\ge2$.
 \end{theorem}
 \begin{proof}[Proof sketch]
@@ -340,10 +344,20 @@ joints, biased selection.
 \end{proof}
 
 \begin{proposition}[Hierarchy]\label{prop:hierarchy}
-Single-sample \dftext{}ness $\subsetneq$ $N$-selection-closedness $\subsetneq$
-undetectability. In particular, undetectability under adaptive queries
-\citep{christ2023undetectable} implies $N$-selection-closedness computationally,
-and the deployed context-hash family satisfies the first but not the second.
+As classes of watermarked samplers,
+\[
+\{\text{undetectable}\}\;\subsetneq\;
+\{\text{$N$-selection-closed}\}\;\subsetneq\;
+\{\text{marginally \dftext}\}:
+\]
+(i) closure implies marginal \dftext{}ness (take the constant selector);
+(ii) the converse fails --- the deployed context-hash family is marginally
+\dftext{} yet not even $2$-selection-closed;
+(iii) undetectability under adaptive queries \citep{christ2023undetectable}
+implies $N$-selection-closedness computationally for every polynomial $N$;
+(iv) the converse fails --- the lifted family is $N$-selection-closed yet
+key-free distinguishable from response-collision statistics. Proofs in
+Appendix~\ref{app:proofs}.
 \end{proposition}
 
 \section{The Jointly-Coupled Watermarking Framework}\label{sec:method}
@@ -353,14 +367,16 @@ all schemes and all selectors. No new watermarking algorithm is introduced;
 existing schemes are lifted unmodified.
 
 \subsection{The $\mathrm{JC}_N$ transform}
-A \emph{keyed sampler} $W$ is any watermarked decoder whose per-step randomness
-is a deterministic (pseudorandom) function of a key $k$ and the generation
-state, e.g., context-hash Gumbel/Aaronson, exponential/inverse-transform
-sampling, tournament sampling, or biased-logit schemes. The
-\emph{jointly-coupled lift} $\mathrm{JC}_N(W)$ generates candidate
+A \emph{keyed sampler} $W$ is any watermarked decoder whose per-step
+randomness is a deterministic (pseudorandom) function of a key $k$ and the
+generation state, and whose key-dependence is \emph{only} through this noise
+stream --- e.g., context-hash Gumbel/Aaronson, exponential/inverse-transform
+sampling, tournament sampling, or biased-logit schemes with keyed sampling.
+The \emph{jointly-coupled lift} $\mathrm{JC}_N(W)$ generates candidate
 $i\in[N]$ by running $W$ \emph{unmodified} under the domain-separated subkey
-$\mathrm{SubKey}_i=\mathrm{PRF}(\mathrm{MasterKey},\,i)$. One master key is
-stored; the derivation is free.
+$\mathrm{SubKey}_i=\mathrm{PRF}(\mathrm{MasterKey},\,i)$; in implementations
+this is one line --- mix the candidate index into the seed-derivation chain.
+One master key is stored; the derivation is free.
 
 \begin{theorem}[Lifting]\label{thm:lifting}
 Let $W$ be a keyed sampler with single-sample (key-averaged) output law
@@ -381,6 +397,16 @@ real tier), and by Theorem~\ref{thm:closure} the released output under
 wrapper of \S\ref{sec:detection}) with a once-per-sequence multiplicity cost.
 \end{theorem}
 
+\begin{proof}[Proof sketch]
+(a) With independent streams the candidates are independent runs of $W$ by
+construction. (b) A distinguisher against the candidate tuple composed with
+the stream-generation map is a distinguisher against the PRF at $N$ distinct
+inputs. (c) i.i.d.\ with marginal $Q$ is Definition~\ref{def:closure};
+closure then follows from Theorem~\ref{thm:closure}. (d) is
+Proposition~\ref{prop:union}. Full proof in Appendix~\ref{app:proofs}.
+\qedhere
+\end{proof}
+
 \begin{remark}[$\varepsilon$ is the price of detectability]\label{rem:price}
 Truly independent streams achieve exact closure but destroy the watermark:
 with no key there is nothing to detect. The PRF is precisely what buys the
@@ -388,22 +414,15 @@ verifier reproducibility, and its $\varepsilon$ is the entire gap between the
 tiers. Exact distortion-freeness and detectability are jointly unattainable;
 $\mathrm{JC}_N$ attains both computationally.
 \end{remark}
-\begin{proof}[Proof sketch]
-(a) Domain separation makes the $N$ noise streams jointly indistinguishable
-from independent streams; each candidate is then an independent run of $W$,
-whose output law is $\mu_W$. (b) i.i.d.\ with marginal $Q$ is precisely
-Definition~\ref{def:closure}. (c) is Proposition~\ref{prop:union}. Full proof
-in Appendix~\ref{app:proofs}. \qedhere
-\end{proof}
 
-Part (a) is worth emphasizing: even for schemes that are \emph{not}
-distortion-free (e.g., biased-logit families), the lift restores candidate
-i.i.d.-ness, so selection behaves as ordinary Best-of-$N$ over the scheme's
-marginal --- removing the selection-induced pathology while leaving the
-scheme's own marginal bias unchanged. For distortion-free $W$, part (b) is the
-full closure guarantee. As a byproduct, strict (argmax) decoders can be used
-again --- no softening --- so each candidate individually retains the exact
-single-sample guarantee.
+Parts (a)--(b) are worth emphasizing: even for schemes that are \emph{not}
+distortion-free (e.g., biased-logit families with keyed sampling), the lift
+restores candidate i.i.d.-ness, so selection behaves as ordinary Best-of-$N$
+over the scheme's own marginal --- removing the selection-induced pathology
+while leaving the scheme's marginal bias unchanged. For distortion-free $W$,
+part (c) is the full closure guarantee. As a byproduct, strict (argmax)
+decoders can be used again --- no softening --- so each candidate individually
+retains the exact single-sample guarantee.
 
 \subsection{Detection: the union wrapper}\label{sec:detection}
 The verifier knows the master key and $N$ (an upper bound suffices), not the
