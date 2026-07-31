@@ -37,48 +37,57 @@ Watermarking under Best-of-$N$ Inference}
 \maketitle
 
 \begin{abstract}
-Distortion-free watermarks guarantee that a \emph{single} generation is distributed
-identically to unwatermarked text. Modern deployments, however, rarely release a single
-sample: inference-time selection --- Best-of-$N$ (BoN) sampling with a reward model,
-reranking, self-consistency --- chooses among $N$ candidates. We show that the standard
-guarantee is \emph{not closed under selection}: with the deployed family of
-context-hashed, deterministic-key schemes (Gumbel/Aaronson-style), the $N$ candidates
-for a prompt are generated from the same pseudorandom stream and collapse to $N$
-identical copies, so BoN forfeits its entire alignment gain; the practical workaround
---- softening the sampler --- restores diversity but sacrifices the distortion-free
-property that motivated the scheme. We formalize \emph{$N$-selection-closed}
-distortion-freeness and prove that joint preservation is \emph{necessary and
-sufficient} for closure under every selection operator --- marginal
-preservation alone controls nothing --- and show that the repair requires
-nothing new: \emph{standard cryptographic domain separation} --- per-candidate
-subkeys, the jointly-coupled transform $\mathrm{JC}_N$ --- restores closure
-completely and minimally for any keyed scheme: \emph{exactly}, if the $N$
-random keys are stored independently; \emph{computationally}, under a compact
-PRF-derived master key. The scheme's own detector lifts by a union wrapper
-whose cost is a once-per-sequence $\sqrt{2\ln N}$ threshold shift, and the
-guarantees are scheme- and selector-agnostic. Instantiated on the deployed
-Gumbel/Aaronson scheme, the lifted system restores the full BoN reward gain of
-unwatermarked sampling (reward $0.0861$ vs.\ ceiling $0.0848$ on
-LLaMA-3.1-8B-Instruct) with each candidate's marginal guarantee unchanged,
-retains detection at $\approx0.3$ z-score cost, and dominates the deployed
-softened workaround on reward, detection, and distributional correctness
-simultaneously.
+Distortion-free language-model watermarks guarantee that a \emph{single}
+watermarked generation has the same marginal law as unwatermarked text.
+Inference-time alignment and test-time scaling, however, generate multiple
+candidates and select among them --- by a reward model, verifier, reranker,
+rejection rule, or self-consistency vote. We show that the marginal guarantee
+is not preserved by such selection. In deterministic context-hashed schemes,
+reusing one key-derived randomness stream across candidates makes all $N$
+candidates identical, eliminating the entire Best-of-$N$ alignment gain; more
+generally, candidate dependence can bias the post-selection output even when
+every candidate marginal is exactly correct. We introduce
+\emph{$N$-selection-closed} distortion-freeness, which requires the candidate
+tuple to match $N$ independent unwatermarked samples, and prove that joint
+preservation is \emph{necessary and sufficient} for closure under every
+key-independent selector --- marginal preservation alone provides no control
+over the post-selection distribution. The repair is a minimal, scheme-agnostic
+lift based on candidate-specific subkeys: independently sampled keys yield
+exact joint closure, and PRF-derived subkeys yield computational joint closure
+under a single master key. Existing detectors lift through a union test with an
+$O(\sqrt{\log N})$ threshold penalty and $N$-fold parallel evaluation. On
+LLaMA-3.1-8B-Instruct, shared-key watermarking produces $1/16$ unique
+candidates and forfeits the full Best-of-$16$ reward gain; candidate-separated
+subkeys restore $16/16$ unique candidates, recover the full available gain
+(reward $0.0861$ vs.\ unwatermarked reference $0.0848$) with each candidate's
+marginal law unchanged, and retain strong post-selection detection
+($\approx0.3$ z-score cost). The same failure and repair reproduce across a
+second distortion-free decoder family and a family of inference-time
+selectors.
 \end{abstract}
 
 \section{Introduction}
 % Hook: inference-time compute is the norm; watermarks are certified sample-wise.
-Watermarking schemes for large language models are certified by a \emph{single-sample}
-guarantee: averaged over the secret key, one generation is distributed exactly as
-unwatermarked text \citep{aaronson2023, kuditipudi2023robust, zhao2024permute}.
-Deployed systems, however, increasingly ship \emph{selection} on top of generation:
-Best-of-$N$ sampling against a reward model recovers the alignment that watermarking
-degrades \citep{verma2025watermarking}, rerankers and verifiers choose among drafts,
-and self-consistency votes over samples. This paper asks a simple question:
+Test-time alignment increasingly improves language-model outputs by generating
+multiple candidates and selecting among them: Best-of-$N$ selects by a reward
+model \citep{verma2025watermarking}, verifier-guided inference selects a
+verified solution, rejection sampling filters low-quality outputs, and
+self-consistency aggregates several reasoning traces. These methods obtain
+their gain from candidate diversity and from the joint structure of the
+candidate pool. Distortion-free watermarking, by contrast, is certified one
+generation at a time: averaged over the secret key, a \emph{single} watermarked
+sample follows the same law as the unwatermarked model
+\citep{aaronson2023, kuditipudi2023robust, zhao2024permute}. These two views do
+not automatically compose --- a marginal guarantee for each candidate does not
+determine the distribution produced after a selector observes all candidates.
+This paper asks:
 \begin{center}
-\emph{Does distortion-freeness survive inference-time selection?}
+\emph{When does a distortion-free watermark compose correctly with
+Best-of-$N$ and other test-time selectors?}
 \end{center}
-We show that it does not --- quantitatively, catastrophically, and for the exact
-scheme family that is deployed today --- and that a one-line fix closes the gap.
+We show that for the deterministic context-hashed scheme family commonly
+studied and used in current watermarking systems, it does not --- the entire
+test-time alignment gain can vanish --- and that a minimal lift restores it.
 
 \textbf{The collapse.} In context-hashed deterministic schemes (Gumbel/Aaronson-style,
 KGW derivatives, SynthID-Text), the per-step noise is a pseudorandom function of the
@@ -90,43 +99,58 @@ creates a first divergence. On LLaMA-3.1-8B-Instruct we observe exactly $1/16$
 unique candidates per prompt --- Figure~\ref{fig:transcript} shows a verbatim
 instance. Selection then has nothing to select from: every
 selection head returns the single-sample reward ($0.0693$), forfeiting the entire
-BoN gain (unwatermarked BoN reaches $0.0848$ at $N{=}16$). More generally, marginal
-correctness with joint correlation suffices to bias \emph{any} selector, and the bias
-\emph{grows} with $N$ (Figure~\ref{fig:toy}; in the comonotone worst case ---
-realized by the deployed scheme --- the shift approaches TV $=\tfrac12$,
-Example~\ref{ex:comonotone}). The de facto workaround --- softening the sampler with
-fresh randomness \citep{verma2025watermarking} --- restores diversity but breaks the
-exact marginal certification it was meant to protect, and we show it is in fact
-strictly dominated by our construction.
+BoN gain (unwatermarked BoN reaches $0.0848$ at $N{=}16$). Complete collapse is
+only the endpoint of the problem: partial candidate correlation also reduces
+effective test-time compute --- the selector receives fewer independent
+opportunities to find a high-reward output --- and biases the post-selection
+distribution even when every candidate marginal is exact, with the bias
+\emph{growing} in $N$ (Figure~\ref{fig:toy}; in the comonotone worst case ---
+realized by the shared-key instantiation --- the shift approaches
+TV $=\tfrac12$, Example~\ref{ex:comonotone}). The de facto workaround ---
+softening the sampler with fresh randomness \citep{verma2025watermarking} ---
+restores diversity but breaks the exact marginal certification it was meant to
+protect, and we show it worsens the reward--detection--distribution trade-off
+relative to our construction.
 
-\textbf{Folklore vs.\ what is new.} That fixed-seed deterministic decoding
-returns identical outputs is known as an operational nuisance
-\citep{verma2025watermarking}. What has been missing is the consequence for the
-\emph{certified guarantee}: distortion-freeness is certified per sample but
-deployed under selection, and no prior analysis addressed (i) what selection
-does to the guarantee (it forfeits the entire BoN gain; in the worst case ---
-realized by the deployed scheme --- the output shift approaches
-$\mathrm{TV}=\tfrac12$), (ii) whether the accepted workaround is sound
-(softening is strictly dominated and remains correlated), (iii) what the right
-property is (joint preservation, exactly characterized below), and (iv) what
-restoring it costs at detection ($\sqrt{2\ln N}$, once per sequence, and
-order-optimal). The phenomenon is folklore; the broken guarantee, its
-quantification, and the closed-loop fix are not.
+\textbf{From candidate diversity to selection correctness.} It is well known
+that deterministic decoding with reused randomness reduces candidate diversity
+\citep{verma2025watermarking}. Our focus is different: we ask whether the
+\emph{distributional guarantee} of a distortion-free watermark survives a
+downstream selector, which requires reasoning about the joint candidate law,
+not only about whether candidates happen to be distinct. We show that (i)
+exact marginals can still yield a biased post-selection distribution, with the
+worst-case shift approaching $\mathrm{TV}=\tfrac12$; (ii) joint preservation
+is exactly the condition needed for selector-universal closure; and (iii)
+candidate-separated randomness restores the reference behavior for
+Best-of-$N$, reranking, rejection sampling, and other key-independent
+selectors, at an order-optimal detection cost.
+
+\textbf{Why this is not merely a seeding issue.} Assigning different
+randomness to different candidates is an operationally natural fix, but it
+does not answer the underlying question: \emph{what property must a
+watermarked candidate pool satisfy so that an arbitrary inference-time
+selector behaves as it would on unwatermarked samples?} The issue persists
+beyond complete stream reuse --- any dependence among candidates can alter the
+output of a reward-based selector while leaving every marginal unchanged
+(Lemma~\ref{lem:attenuation} quantifies the attenuation). Our contribution is
+to identify and characterize the required joint guarantee;
+candidate-specific domain separation is then the minimal construction that
+realizes it.
 
 \textbf{Formalization.} We define \emph{$N$-selection-closed} distortion-freeness:
 the joint distribution of the $N$ candidates (and hence of the output of \emph{any}
 selection operator applied to them) matches that of $N$ i.i.d.\ unwatermarked samples.
 Single-sample (marginal) distortion-freeness does not imply it; joint
 preservation is exactly the right condition --- necessary and sufficient
-(Theorem~\ref{thm:closure}). The property sits strictly between the
-deployed weak guarantee and cryptographic undetectability
-\citep{christ2023undetectable}, which implies it computationally but has no deployed
-instantiation (Proposition~\ref{prop:hierarchy}).
+(Theorem~\ref{thm:closure}). The property sits strictly between the marginal guarantee and cryptographic
+undetectability \citep{christ2023undetectable}, which implies it
+computationally but has no practical instantiation
+(Proposition~\ref{prop:hierarchy}).
 
 \textbf{Repair.} We emphasize what this paper is \emph{not}: it proposes no
 new watermarking algorithm, and the mechanism we analyze is deliberately
 unoriginal --- domain separation is textbook cryptographic hygiene. The
-contribution is the missing deployment-level property and the proof that this
+contribution is the missing selection-level property and the proof that this
 standard mechanism is a \emph{complete and minimal} repair. The jointly-coupled
 transform $\mathrm{JC}_N$: given any keyed sampler $W$ whose per-step
 randomness is a pseudorandom function of its key, candidate $i$ runs $W$
@@ -136,7 +160,8 @@ exactly, if the $N$ keys are sampled and stored independently;
 computationally, under the compact master key --- so whatever marginal
 guarantee $W$ has is inherited \emph{jointly}: marginally distortion-free $W$
 becomes $N$-selection-closed at the corresponding tier
-(Theorem~\ref{thm:lifting}), for every selection operator.
+(Theorems~\ref{thm:exactlift} and~\ref{thm:lifting}), for every selection
+operator.
 Detection lifts the same way: the \emph{union wrapper} runs $W$'s own detector
 under each subkey (only $N$, or an upper bound, need be known --- not the
 selected index), paying a once-per-sequence threshold penalty of
@@ -148,7 +173,8 @@ correct-subkey oracle at every $N$ and entropy level.
 \textbf{Results.} On LLaMA-3.1-8B-Instruct with HH-RLHF prompts and an ArmoRM reward:
 (i) strict shared-key BoN returns identical candidates and zero BoN gain;
 (ii) subkeys restore $16/16$ unique candidates and full BoN reward
-($0.0861 \ge$ unwatermarked ceiling $0.0848$), with single-sample reward matching
+($0.0861$ vs.\ the unwatermarked Best-of-$N$ reference $0.0848$), with
+single-sample reward matching
 the unwatermarked model ($0.0698$ vs.\ $0.0703$; the candidate marginal is
 unchanged);
 (iii) union detection retains $z=7.71$ vs.\ $8.00$ for the shared key;
@@ -158,26 +184,35 @@ vs.\ broken distortion-freeness).
 
 \textbf{Contributions.}
 \begin{enumerate}
-  \item We identify and quantify the failure of single-sample distortion-freeness
-        under inference-time selection, on the deployed scheme family
-        (\S\ref{sec:collapse}).
-  \item We formalize $N$-selection-closedness, characterize it exactly (joint
-        preservation is necessary and sufficient for closure under every
-        selector), quantify the mechanism (candidate correlation $\rho$
-        attenuates the selection gain by $\sqrt{1-\rho}$,
-        Lemma~\ref{lem:attenuation}), and place the notion in a hierarchy
-        between marginal distortion-freeness and undetectability
+  \item \emph{A failure of marginal distortion-freeness under test-time
+        selection.} Single-sample distortion-freeness does not imply
+        correctness after Best-of-$N$, reward reranking, rejection sampling,
+        or other selection rules; under shared deterministic watermark
+        randomness all candidates collapse to one sample, eliminating the
+        entire test-time alignment gain (\S\ref{sec:collapse}).
+  \item \emph{The correct joint guarantee.} We define $N$-selection-closed
+        distortion-freeness and prove that preservation of the candidate joint
+        law is \emph{necessary and sufficient} for closure under every
+        key-independent selector; marginal preservation alone gives no control
+        over the selected output. Candidate correlation $\rho$ attenuates the
+        test-time scaling gain by exactly $\sqrt{1-\rho}$
         (\S\ref{sec:theory}).
-  \item We give the general jointly-coupled transform $\mathrm{JC}_N$ --- a
-        compiler that lifts \emph{any} keyed watermarking scheme to a
-        selection-closed one under a single master key
-        (Theorem~\ref{thm:lifting}) --- together with the lifted union
-        detection and its once-per-sequence $\sqrt{2\ln N}$ cost analysis
-        (\S\ref{sec:method}).
-  \item Instantiating the framework on the deployed Gumbel/Aaronson scheme, a
-        real aligned model shows full recovery of the BoN gain with the
-        candidate marginal unchanged, and dominance over the deployed softened
-        workaround (\S\ref{sec:experiments}).
+  \item \emph{A minimal selection-compatible lift.} Independently keyed
+        candidates give exact joint closure; candidate-specific subkeys
+        derived from one master key give computational joint closure under PRF
+        security. The construction applies to existing keyed decoders without
+        modifying their token-level sampling rule (\S\ref{sec:method}).
+  \item \emph{Detection after candidate separation.} The base detector lifts
+        through a union test over candidate subkeys: an $O(\sqrt{\log N})$
+        statistical threshold penalty --- order-optimal for index-blind
+        detection --- plus $N$ parallel base-detector evaluations
+        (\S\ref{sec:detection}).
+  \item \emph{Validation across selectors and watermark families.} Across
+        hard/soft/Exp Best-of-$N$, rejection sampling, filter-and-sample, and
+        stress selectors, candidate separation restores the reward and
+        diversity behavior of independent inference while retaining strong
+        detection; the same pattern holds for a second deterministic
+        distortion-free decoder family (\S\ref{sec:experiments}).
 \end{enumerate}
 
 \section{Related Work}\label{sec:related}
@@ -194,7 +229,7 @@ addresses intra-sequence reuse, not cross-candidate correlation.
 correlations and break distortion-freeness of the \emph{generated} text distribution.
 Our setting is the extreme collision --- $N$ candidates for one prompt collide at
 every step --- and our observation is one level higher: a \emph{selection operator}
-converts joint correlation into first-order bias of the \emph{deployed output}.
+converts joint correlation into first-order bias of the \emph{post-selection output}.
 The random-offset construction of \citet{kuditipudi2023robust} decorrelates
 candidates approximately, at the cost of alignment-based (edit-distance) detection;
 our fix keeps the strong context-hash detectors.
@@ -217,11 +252,12 @@ guarantees are proved once for all schemes and selectors.
 \textbf{Undetectability.}
 \citet{christ2023undetectable} construct watermarks that are computationally
 undetectable under adaptive multi-query access, which implies selection-closure
-computationally; the construction is not practical for deployment. Our notion is the
-minimal targeted property, and our fix upgrades the deployed family in place
+computationally; the construction is not practical to instantiate. Our notion is
+the minimal targeted property, and our lift upgrades the context-hash family in
+place
 (Proposition~\ref{prop:hierarchy}).
 
-\section{The Selection Collapse}\label{sec:collapse}
+\section{When Watermarking Eliminates Test-Time Scaling}\label{sec:collapse}
 
 \begin{figure}[t]
 \centering
@@ -261,9 +297,10 @@ Let each candidate be a fair coin flip and let the selector prefer heads. With
 i.i.d.\ candidates, Best-of-$N$ returns heads with probability $1-2^{-N}$. Now
 couple the candidates into $N$ copies of a \emph{single} flip: every copy is
 still a perfectly fair coin --- the certified, marginal guarantee is intact ---
-yet the selector returns heads with probability $\tfrac12$. The deployed
-output laws differ by $\mathrm{TV}=\tfrac12-2^{-N}\to\tfrac12$: marginal
-correctness survives, the deployed guarantee does not, and the gap grows with
+yet the selector returns heads with probability $\tfrac12$. The
+post-selection output laws differ by $\mathrm{TV}=\tfrac12-2^{-N}\to\tfrac12$: marginal
+correctness survives, the selection-level guarantee does not, and the gap
+grows with
 the very compute ($N$) that selection adds. The strict shared key realizes
 exactly this coupling (Figure~\ref{fig:transcript});
 Example~\ref{ex:comonotone} gives the general statement.
@@ -279,7 +316,7 @@ the strict shared key; the softened variant diverges stochastically but retains 
 $2.2\times$ longer shared prefix than unwatermarked sampling
 (Appendix~\ref{app:exp}).
 
-\subsection{A minimal model of selection bias}\label{sec:toy}
+\subsection{Partial correlation and scaling attenuation}\label{sec:toy}
 Marginal correctness with joint correlation suffices to bias any selector.
 We construct candidates with exact marginals and tunable correlation $\rho$
 (Gaussian copula), select by noisy reward, and measure the total-variation
@@ -291,16 +328,20 @@ of $5$ at $N{=}16$), and the selected reward drops accordingly. Independent
 candidates ($\rho{=}0$, our fix) keep the curve at zero.
 The mechanism admits a closed form:
 
-\begin{lemma}[Correlation attenuates the selection gain]\label{lem:attenuation}
+\begin{lemma}[Correlation attenuates test-time scaling]\label{lem:attenuation}
 Let candidate rewards be exchangeable Gaussian with mean $\mu$, variance
 $\sigma^2$ and pairwise correlation $\rho\in[0,1]$, and let
 $m_N=\mathbb E[\max_{i\le N}Z_i]$ for i.i.d.\ standard normals
 ($m_N\sim\sqrt{2\ln N}$). Then the expected reward of hard-BoN is
 $\mu+\sigma\sqrt{1-\rho}\,m_N$: the independent system's selection gain is
-attenuated by exactly $\sqrt{1-\rho}$, so the deployed output trails
+attenuated by exactly $\sqrt{1-\rho}$, so the correlated pool trails
 independent BoN by $(1-\sqrt{1-\rho}\,)\,\sigma\,m_N$ --- increasing in both
 $\rho$ and $N$, and equal to the entire gain at $\rho=1$ (the shared-key
-collapse). Proof in Appendix~\ref{app:proofs}.
+collapse). Equivalently, the normalized \emph{scaling efficiency}
+$\big(\mathbb E[R_{\mathrm{selected}}]-\mathbb E[R_{\mathrm{single}}]\big)/
+\big(\mathbb E[R_{\mathrm{indep.\ BoN}}]-\mathbb E[R_{\mathrm{single}}]\big)$
+equals $\sqrt{1-\rho}$ under this model: correlation taxes precisely the
+return on additional test-time compute. Proof in Appendix~\ref{app:proofs}.
 \end{lemma}
 
 \begin{figure}[t]
@@ -351,6 +392,12 @@ The final claim is witnessed by \S\ref{sec:toy}: exact marginals, correlated
 joints, biased selection.
 \end{proof}
 
+The universal selector class is what yields an exact characterization; the
+positive direction directly covers practical inference-time selectors ---
+hard and soft Best-of-$N$, reward reranking, verifier selection, rejection
+sampling, filter-and-sample, and randomized voting rules --- provided the
+selector does not access the watermark key.
+
 \begin{proposition}[Hierarchy]\label{prop:hierarchy}
 As classes of watermarked samplers,
 \[
@@ -359,7 +406,7 @@ As classes of watermarked samplers,
 \{\text{marginally \dftext}\}:
 \]
 (i) closure implies marginal \dftext{}ness (take the constant selector);
-(ii) the converse fails --- the deployed context-hash family is marginally
+(ii) the converse fails --- the shared-key context-hash family is marginally
 \dftext{} yet not even $2$-selection-closed;
 (iii) undetectability under adaptive queries \citep{christ2023undetectable}
 implies $N$-selection-closedness computationally for every polynomial $N$;
@@ -368,13 +415,13 @@ key-free distinguishable from response-collision statistics. Proofs in
 Appendix~\ref{app:proofs}.
 \end{proposition}
 
-\section{The Jointly-Coupled Watermarking Framework}\label{sec:method}
+\section{Candidate-Separated Watermarking}\label{sec:method}
 This section is deliberately scheme-agnostic: we define a transform on
 \emph{arbitrary} keyed watermarking schemes and prove its guarantees once, for
 all schemes and all selectors. No new watermarking algorithm is introduced;
 existing schemes are lifted unmodified.
 
-\subsection{The $\mathrm{JC}_N$ transform}
+\subsection{The candidate-separated lift $\mathrm{JC}_N$}
 A \emph{keyed sampler} $W$ is any watermarked decoder whose per-step
 randomness is a deterministic (pseudorandom) function of a key $k$ and the
 generation state, and whose key-dependence is \emph{only} through this noise
@@ -384,38 +431,41 @@ The \emph{jointly-coupled lift} $\mathrm{JC}_N(W)$ generates candidate
 $i\in[N]$ by running $W$ \emph{unmodified} under the domain-separated subkey
 $\mathrm{SubKey}_i=\mathrm{PRF}(\mathrm{MasterKey},\,i)$; in implementations
 this is one line --- mix the candidate index into the seed-derivation chain.
-One master key is stored; the derivation is free.
+One master key is stored; the derivation is free. (``Jointly coupled'' refers
+to \emph{controlling} the full joint candidate law, not to increasing
+dependence among candidates.)
 
-\begin{theorem}[Lifting]\label{thm:lifting}
-Let $W$ be a keyed sampler with single-sample (key-averaged) output law
-$\mu_W$.
-(a) \emph{Exact tier (independently stored keys):} if the $N$ candidates are
-driven by $N$ independently sampled and stored random keys, their joint law
-\emph{equals} $\mu_W^{\otimes N}$ --- total variation exactly zero --- for any
-base scheme $W$, distortion-free or not.
-(b) \emph{Computational tier (PRF-derived subkeys):} with subkeys derived from
-one master key by a PRF ($\mathrm{JC}_N$), the joint is computationally
-indistinguishable from
-$\mu_W^{\otimes N}$: every polynomial-time observer --- any efficient selector
-composed with any efficient downstream test --- has advantage at most the PRF
-distinguishing advantage $\varepsilon$.
-(c) If $W$ is marginally distortion-free ($\mu_W=Q$), then $\mathrm{JC}_N(W)$
-is $N$-selection-closed (exactly in the stored-keys tier, up to
-$\varepsilon$ in the PRF tier), and by Theorem~\ref{thm:closure} the released
-output under
-\emph{any} selection operator is distributed as unwatermarked Best-of-$N$.
-(d) Any detector for $W$ lifts to a detector for $\mathrm{JC}_N(W)$ (the union
+\begin{theorem}[Exact independent-key lift]\label{thm:exactlift}
+Let $W$ be a keyed sampler with key-averaged output law $\mu_W$. Draw
+$K_1,\dots,K_N$ i.i.d.\ from the key distribution and generate candidate $i$
+by running $W$ unmodified under $K_i$. Then
+$(Y_1,\dots,Y_N)\sim\mu_W^{\otimes N}$ \emph{exactly} --- for any base
+scheme $W$, distortion-free or not. If $\mu_W=Q_x$ for every prompt, the
+construction is exactly $N$-selection-closed, and by
+Theorem~\ref{thm:closure} the post-selection output equals unwatermarked
+Best-of-$N$ under every key-independent selector.
+\end{theorem}
+\begin{proof}[Proof sketch]
+Independent keys make the candidates independent runs of $W$; each marginal is
+the key-averaged law $\mu_W$. Full proof in Appendix~\ref{app:proofs}.
+\end{proof}
+
+\begin{theorem}[Single-master-key realization]\label{thm:lifting}
+Let $K_i=\mathrm{PRF}(K_{\mathrm{master}},\,i)$ as in $\mathrm{JC}_N$. Under
+PRF security the candidate tuple is computationally indistinguishable from
+$\mu_W^{\otimes N}$; consequently every \emph{efficient} key-independent
+selector produces an output computationally indistinguishable from the same
+selector applied to independent samples of $\mu_W$, and marginally
+distortion-free $W$ becomes \emph{computationally} $N$-selection-closed. Any
+detector for $W$ lifts to a detector for $\mathrm{JC}_N(W)$ (the union
 wrapper of \S\ref{sec:detection}) with a once-per-sequence multiplicity cost.
 \end{theorem}
-
 \begin{proof}[Proof sketch]
-(a) With independent streams the candidates are independent runs of $W$ by
-construction. (b) A distinguisher against the candidate tuple composed with
-the stream-generation map is a distinguisher against the PRF at $N$ distinct
-inputs. (c) i.i.d.\ with marginal $Q$ is Definition~\ref{def:closure};
-closure then follows from Theorem~\ref{thm:closure}. (d) is
-Proposition~\ref{prop:union}. Full proof in Appendix~\ref{app:proofs}.
-\qedhere
+A distinguisher against the candidate tuple composed with the
+stream-generation map is a distinguisher against the PRF at $N$ distinct
+inputs; conclude with Theorem~\ref{thm:exactlift} and
+Theorem~\ref{thm:closure}. Detection is Proposition~\ref{prop:union}. Full
+proof in Appendix~\ref{app:proofs}.
 \end{proof}
 
 \begin{remark}[Key management, not impossibility]\label{rem:price}
@@ -431,14 +481,32 @@ key material, $N$ unbounded); $\mathrm{JC}_N$ is the compact end of this
 axis.
 \end{remark}
 
-Parts (a)--(b) are worth emphasizing: even for schemes that are \emph{not}
-distortion-free (e.g., biased-logit families with keyed sampling), the lift
-restores candidate i.i.d.-ness, so selection behaves as ordinary Best-of-$N$
-over the scheme's own marginal --- removing the selection-induced pathology
-while leaving the scheme's marginal bias unchanged. For distortion-free $W$,
-part (c) is the full closure guarantee. As a byproduct, strict (argmax)
-decoders can be used again --- no softening --- so each candidate individually
-inherits the base scheme's single-sample guarantee unchanged.
+Theorem~\ref{thm:exactlift} is worth emphasizing: it holds for schemes that
+are \emph{not} distortion-free (e.g., biased-logit families with keyed
+sampling) --- the lift restores candidate i.i.d.-ness over the scheme's own
+marginal, removing the selection-induced pathology while leaving any marginal
+bias unchanged. For distortion-free $W$ it is the full closure guarantee. As a
+byproduct, strict (argmax) decoders can be used again --- no softening --- so
+each candidate individually inherits the base scheme's single-sample guarantee
+unchanged.
+
+\begin{table}[h]
+\caption{Guarantee levels by construction.}
+\label{tab:tiers}
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+Construction & Marginal law & Candidate joint law & Selection guarantee \\
+\midrule
+Shared deterministic key & exact & degenerate/correlated & none \\
+Independent candidate keys & exact & exact product & exact closure \\
+PRF-derived subkeys ($\mathrm{JC}_N$) & exact & computationally product & computational closure \\
+Softened shared key & altered & partially decorrelated & none \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
 
 \subsection{Detection: the union wrapper}\label{sec:detection}
 The verifier knows the master key and $N$ (an upper bound suffices), not the
@@ -471,14 +539,20 @@ only cost is the $\sqrt{2\ln N}$ threshold (dash-dotted, bottom).}
 \label{fig:detectors}
 \end{figure}
 
-Two loss channels must not be conflated. The multiplicity cost above is the
-\emph{only} price of restoring independence, and it is order-optimal:
-detecting one elevated stream among $N$ independent nulls is the classical
-needle-in-a-haystack problem, for which no index-blind level-$\alpha$ test can
-improve on the max test's $\sqrt{2\ln N}$ threshold order
-\citep{ingster1997,donoho2004higher}. Separately, \emph{reward selection
-itself} tilts the released text toward weakly watermarked candidates --- a
-loss that exists for any token-level watermark under any key design:
+The union wrapper introduces two distinct costs, which must not be conflated
+with each other or with selection effects. \emph{Statistically}, testing $N$
+subkeys raises the rejection threshold by
+$\Phi^{-1}(1-\alpha/N)-\Phi^{-1}(1-\alpha)=\Theta(\sqrt{\log N})$ under a
+normal approximation, with $\sqrt{2\ln N}$ the asymptotic leading order; this
+penalty is order-optimal --- detecting one elevated stream among $N$
+independent nulls is the classical needle-in-a-haystack problem, for which no
+index-blind level-$\alpha$ test can improve on the max test's threshold order
+\citep{ingster1997,donoho2004higher}. \emph{Computationally}, detection
+requires $N$ evaluations of the base detector, which are independent and
+parallelizable. Separately from both, \emph{reward selection itself} tilts
+the released text toward weakly watermarked candidates --- a loss that exists
+for any token-level watermark under any key design and is orthogonal to the
+multiplicity correction:
 
 \begin{proposition}[Selection tilt]\label{prop:tilt}
 If each candidate's (reward, per-text signal) pair is bivariate Gaussian with
@@ -502,33 +576,36 @@ over verbatim.
 \emph{Inverse-transform / random-offset schemes} \citep{kuditipudi2023robust}:
 the lift replaces the random offset's approximate decorrelation with exact
 (computational) independence while keeping their alignment detector per subkey.
-\emph{Biased-logit schemes} (KGW): Theorem~\ref{thm:lifting}(a) applies ---
+\emph{Biased-logit schemes} (KGW): Theorem~\ref{thm:exactlift} applies ---
 candidates become i.i.d.\ over the biased marginal, restoring ordinary BoN
-behavior; closure in the sense of (b) is vacuous since the base scheme is not
+behavior; full closure is vacuous since the base scheme is not
 distortion-free.
 
 \section{Experiments}\label{sec:experiments}
-\textbf{Setup.} We instantiate $\mathrm{JC}_N$ on the deployed Gumbel/Aaronson
+\textbf{Setup.} We instantiate $\mathrm{JC}_N$ on the Gumbel/Aaronson
 scheme. LLaMA-3.1-8B-Instruct, HH-RLHF prompts ($128$), $N{=}16$
 candidates, temperature $1.0$, ArmoRM reward; Gumbel/Aaronson watermark
-(context hash $h{=}4$). Arms: unwatermarked i.i.d.\ BoN (ceiling); strict
-shared-key; strict subkey (ours) with union detection; the softened shared-key
-workaround of \citet{verma2025watermarking}. We report reward of the selected
+(context hash $h{=}4$). Arms: unwatermarked i.i.d.\ BoN (the matched
+independent-sampling reference); shared deterministic key;
+candidate-separated subkeys (ours) with union detection; the softened
+shared-key workaround of \citet{verma2025watermarking}. We report reward of the selected
 output under four selection heads (single, hard-BoN, soft-BoN, Exp-BoN), detection
 median $z$ and TPR, and calibration.
 
 \begin{table}[t]
-\caption{Main result (LLaMA-3.1-8B-Instruct, $N{=}16$). Strict shared key forfeits
-the entire BoN gain; subkeys restore the unwatermarked ceiling with the
-candidate marginal unchanged; union detection costs $\approx0.3$ z. The softened workaround
-is dominated on all three axes.}
+\caption{Main result (LLaMA-3.1-8B-Instruct, $N{=}16$). The shared
+deterministic key forfeits the entire BoN gain; candidate-separated subkeys
+restore the unwatermarked Best-of-$N$ reference with the candidate marginal
+unchanged; union detection costs $\approx0.3$ z. The softened workaround
+trades away the exact marginal certification and retains less post-selection
+signal.}
 \label{tab:main}
 \begin{center}
 \begin{tabular}{llccc}
 \toprule
 Arm & Strategy & Reward & Median $z$ & TPR@$.01$ \\
 \midrule
-Unwatermarked (ceiling) & single & $0.0703$ & --- & --- \\
+Unwatermarked (reference) & single & $0.0703$ & --- & --- \\
  & hard-BoN & $0.0848$ & --- & --- \\
 \midrule
 Softened shared key & single & $0.0697$ & $7.09$ & $0.944$ \\
@@ -537,7 +614,7 @@ Softened shared key & single & $0.0697$ & $7.09$ & $0.944$ \\
 Strict shared key & single & $0.0693$ & $8.00$ & $0.945$ \\
  & hard/soft/Exp-BoN & $0.0693$ & $8.00$ & $0.945$ \\
 \midrule
-\textbf{Strict subkey + union (ours)} & single & $0.0698$ & $7.71$ & $0.926$ \\
+\textbf{Candidate-separated $+$ union (ours)} & single & $0.0698$ & $7.71$ & $0.926$ \\
  & hard-BoN & $\mathbf{0.0861}$ & $6.50$ & $0.891$ \\
  & soft-BoN & $0.0746$ & $7.13$ & $0.915$ \\
  & Exp-BoN & $0.0750$ & $7.11$ & $0.911$ \\
@@ -551,24 +628,29 @@ Strict shared key & single & $0.0693$ & $8.00$ & $0.945$ \\
 selection heads return the single-sample reward $0.0693$ --- the full BoN gain
 ($+0.0155$) is forfeit.
 (2) \emph{Restoration:} subkeys yield $16/16$ unique candidates; single-sample
-reward $0.0698\approx0.0703$ (candidate marginal unchanged), hard-BoN
-$0.0861\ge0.0848$ (full gain; the slight excess is the watermark's variance bonus).
+reward $0.0698\approx0.0703$ (candidate marginal unchanged), hard-BoN $0.0861$
+vs.\ reference $0.0848$ --- numerically slightly above the unwatermarked
+reference and within the uncertainty of the current evaluation. In
+gain-retained terms
+($(R_N{-}R_1)_{\mathrm{method}}/(R_N{-}R_1)_{\mathrm{unwm}}$): shared key
+$0\%$, softened $107\%$, candidate-separated $112\%$ --- the latter two
+consistent with full recovery.
 (3) \emph{Detection:} union costs $8.00\to7.71$ ($\approx0.3$ z); the subkey text is
 null under the base key ($0.057$ at the $0.05$ level) and the union FPR is
 calibrated ($0.055$/$0.012$ at $0.05$/$0.01$).
-(4) \emph{Dominance:} vs.\ the softened workaround, ours is equal or better on
-reward ($0.0861$ vs.\ $0.0852$), stronger on post-BoN detection ($z$ $6.50$ vs.\
-$5.62$; strict argmax embeds a stronger per-text signal and union loses almost
-nothing), and preserves the exact marginal certification where softening does
-not.
+(4) \emph{Trade-off:} vs.\ the softened workaround, ours improves the
+reward--detection--distribution trade-off: reward equal or better ($0.0861$
+vs.\ $0.0852$), stronger post-BoN detection ($z$ $6.50$ vs.\ $5.62$; strict
+argmax embeds a stronger per-text signal and union loses almost nothing), and
+the exact marginal certification preserved where softening breaks it.
 
 \textbf{Selection shift vs.\ $N$ (real model).}
 Figure~\ref{fig:realshift} is the real-data companion of Figure~\ref{fig:toy}:
 subsampling $N\in\{1,\dots,16\}$ candidates and selecting by reward, the strict
 shared key's gap to unwatermarked BoN grows from $0.0010$ to $0.0155$ ---
-selection converts the joint degeneracy into a first-order, $N$-increasing bias
-of the released output --- while the subkey arm stays at zero (slightly negative:
-the variance bonus). The right panel tracks the watermark after selection: the
+selection converts the joint degeneracy into a first-order, $N$-increasing
+bias of the released output --- while the subkey arm stays at zero
+(numerically slightly negative, within evaluation uncertainty). The right panel tracks the watermark after selection: the
 subkey arm's union $z$ exceeds the softened baseline at \emph{every} $N$.
 
 \textbf{Selector family.}
@@ -584,10 +666,10 @@ Repeating the experiment with the permute-and-flip / exponential watermark
 \citep{zhao2024permute} --- a different deterministic decoder with its own
 detector --- reproduces both the failure and the fix
 (Table~\ref{tab:pf}): the shared key again collapses to $1.0/16$ unique
-candidates and forfeits the BoN gain ($0.0728$ vs.\ ceiling $0.0848$), and the
+candidates and forfeits the BoN gain ($0.0728$ vs.\ reference $0.0848$), and the
 lifted version restores $16/16$ unique candidates and full BoN reward
-($0.0874$; permute-and-flip's slightly sharper decoder even exceeds the
-sampling ceiling, consistent with \citealp{zhao2024permute}). Union detection
+($0.0874$; permute-and-flip's slightly sharper decoder lands above the
+sampling-based reference, consistent with \citealp{zhao2024permute}). Union detection
 calibrates exactly as in the Gumbel case (FPR $0.055/0.011$ at nominal
 $0.05/0.01$; lifted text is null under the base key, $0.054$). One honest
 difference: after reward selection the retained signal is weaker than for
@@ -610,9 +692,9 @@ correlation ($2.45$ vs.\ $1.09$ words): softening decorrelates incompletely
 \end{center}
 \caption{Real-model selection shift (LLaMA-3.1-8B-Instruct, hard-BoN over
 subsampled candidates). \emph{Left:} reward gap of the selected output to
-unwatermarked BoN at the same $N$. The strict shared key's shift grows with $N$
-(to $0.0155$, the entire BoN gain), mirroring Figure~\ref{fig:toy}; subkeys track
-the ceiling (gap $\le 0$). \emph{Right:} median detection $z$ of the selected
+unwatermarked BoN at the same $N$. The shared key's shift grows with $N$
+(to $0.0155$, the entire BoN gain), mirroring Figure~\ref{fig:toy}; subkeys
+track the reference (gap $\approx0$). \emph{Right:} median detection $z$ of the selected
 output; the subkey arm (union detection) stays above the softened workaround at
 every $N$. The shared key's flat $z=8.0$ reflects that its ``selection'' returns
 the same single sample.}
@@ -635,15 +717,34 @@ prefers weakly watermarked candidates; $z$ retained $79$--$95\%$ across heads),
 which is an orthogonal, entropy-driven phenomenon. Intra-sequence key reuse
 \citep{keycollision2024} is likewise orthogonal and composable with our fix.
 
+\section{Limitations}
+Key-dependent selectors are outside the guarantee (and demonstrably break
+closure, Appendix~\ref{app:exp}). Candidate separation restores the intended
+candidate law but does not remove the reward--watermark anticorrelation:
+reward selection may still prefer candidates with weaker watermark evidence.
+Computational closure is weaker than adaptive multi-query undetectability
+(Proposition~\ref{prop:hierarchy}). Union detection scales linearly in the
+number of candidate subkeys, and the verifier must know $N$ or an upper bound.
+The study focuses on deterministic keyed decoder families; our largest
+evaluation uses one instruction-tuned generator, one reward model, and one
+prompt distribution, with a second decoder family as a replication.
+
 \section{Conclusion}
-Distortion-freeness, as certified, is a single-sample property; deployment is a
-selection property. The gap is real (the entire BoN gain), the formalization is
-simple ($N$-selection-closedness), and the remedy is standard domain separation, deliberately unoriginal:
-$\mathrm{JC}_N$ lifts any keyed scheme --- existing detectors included --- to
-joint closure (exact with independently stored keys, computational under one
-compact master key), at a once-per-sequence $\sqrt{2\ln N}$ detection cost. Watermarks should be
-certified --- and can now be mechanically lifted --- to be distortion-free
-\emph{after} you select.
+Distortion-free watermarking is usually defined for one generation, while
+inference-time alignment and test-time scaling act on a set of generations. We
+showed that this distinction is consequential: exact candidate marginals can
+coexist with a correlated joint law that changes the post-selection
+distribution, and shared deterministic randomness can eliminate the entire
+Best-of-$N$ gain. The appropriate guarantee is therefore selection-level and
+joint: the candidate pool should match independent samples from the reference
+model. Candidate-specific keys provide a minimal correction --- independent
+keys give exact selection closure; PRF-derived subkeys give a compact
+computational realization under one master key --- and, with a union detector,
+restore the reward and diversity benefits of selection-based inference while
+retaining the base watermark's marginal guarantee. The broader lesson is that
+watermarking should be evaluated not only at $N{=}1$, but along the same
+test-time scaling curves used for alignment: a watermark is compatible with
+Best-of-$N$ only when its guarantee survives selection.
 
 \bibliography{refs}
 \bibliographystyle{iclr2025_conference}
@@ -715,7 +816,7 @@ $\tfrac12$. The total-variation shift of the released output is therefore
 \]
 monotonically increasing in $N$. The shared-key deterministic scheme of
 \S\ref{sec:collapse} realizes exactly this coupling (all candidates identical),
-so the bound is attained by a deployed system, not only in the worst case. \qed
+so the bound is attained by the shared-key instantiation, not only in the worst case. \qed
 \end{example}
 
 \subsection{Proof of Proposition~\ref{prop:hierarchy}}
@@ -745,13 +846,16 @@ polynomial-time, key-free distinguisher. (This is a property of the entire
 context-hash family, orthogonal to our fix.) Hence the inclusion is strict.
 \qed
 
-\subsection{Proof of Theorem~\ref{thm:lifting}}
-\textbf{(a) Exact tier.} With $N$ independently sampled and stored random keys
-the candidates are
-independent runs of the unmodified base sampler by construction, hence i.i.d.\
-with law $\mu_W$; the joint \emph{equals} $\mu_W^{\otimes N}$ and every
-pushforward is preserved exactly.
-\textbf{(b) Computational tier.} All subkeys are evaluations of one PRF at
+\subsection{Proofs of Theorems~\ref{thm:exactlift} and~\ref{thm:lifting}}
+\textbf{Theorem~\ref{thm:exactlift}.} With $N$ independently sampled keys the
+candidates are independent runs of the unmodified base sampler by
+construction, hence i.i.d.\ with law $\mu_W$; the joint \emph{equals}
+$\mu_W^{\otimes N}$ and every pushforward is preserved exactly. If
+$\mu_W=Q_x$, this is Definition~\ref{def:closure} (exact), and
+Theorem~\ref{thm:closure} gives closure under every key-independent selector.
+\qed
+
+\textbf{Theorem~\ref{thm:lifting}.} All subkeys are evaluations of one PRF at
 distinct points
 $(\mathrm{MasterKey},i)$, $i\in[N]$; by PRF security the tuple of derived noise
 streams is computationally indistinguishable from $N$ independent truly-random
@@ -759,14 +863,14 @@ streams (a single invocation of the PRF game over the $N$ query points; no
 hybrid over candidates is needed). Conditioned on independent streams, the
 candidates are independent runs of the unmodified base sampler $W$, hence
 i.i.d.\ with law $\mu_W$; a distinguisher against the candidate tuple would
-therefore distinguish the streams, contradicting PRF security. Note that
-(a)--(b) make no assumption on $W$ beyond keyed-ness --- in particular no
-distortion-freeness.
-\textbf{(c)} If $\mu_W=Q_x$ for every prompt, then i.i.d.\ with marginal $Q_x$
-is precisely Definition~\ref{def:closure}, and Theorem~\ref{thm:closure} yields
-closure under every selection operator.
-\textbf{(d)} The base detector's null is exact under each wrong subkey (the
-text is independent of that subkey's stream), so the union wrapper of
+therefore distinguish the streams, contradicting PRF security. Neither
+theorem assumes anything of $W$ beyond keyed-ness --- in particular no
+distortion-freeness. If $\mu_W=Q_x$, indistinguishability from
+$Q_x^{\otimes N}$ is Definition~\ref{def:closure} (computational), and the
+computational form of Theorem~\ref{thm:closure} yields closure for every
+efficient key-independent selector. For detection, the base detector's null is
+exact under each wrong subkey (the text is independent of that subkey's
+stream), so the union wrapper of
 Proposition~\ref{prop:union} applies verbatim, with its once-per-sequence
 multiplicity cost and index-recovery byproduct. \qed
 
@@ -879,7 +983,7 @@ $\Gamma$-null. For the selected output (hard-BoN, $N{=}16$):
 Arm (selected output) & TPR@FPR$=.05$ & TPR@FPR$=.01$ & TPR@FPR$=.001$ \\
 \midrule
 Softened shared key & $\mathbf{0.948}$ & $0.882$ & $0.866$ \\
-Strict subkey $+$ union (ours) & $0.930$ & $\mathbf{0.891}$ & $\mathbf{0.883}$ \\
+Candidate-separated $+$ union (ours) & $0.930$ & $\mathbf{0.891}$ & $\mathbf{0.883}$ \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -887,7 +991,7 @@ Strict subkey $+$ union (ours) & $0.930$ & $\mathbf{0.891}$ & $\mathbf{0.883}$ \
 Under honest calibration the softened baseline's apparent nominal-threshold
 advantage disappears: its TPR@$.01$ drops from $0.909$ to $0.882$ (its nominal
 threshold had operated at FPR $0.016$), while ours is unchanged
-($0.891$). At the strict operating points that matter for deployment
+($0.891$). At the strict low-FPR operating points
 (FPR $10^{-2}$, $10^{-3}$) the subkey arm leads, and its ROC degrades more
 gracefully as the threshold tightens ($0.930\!\to\!0.883$ vs.\
 $0.948\!\to\!0.866$) --- the payoff of the stronger median signal
@@ -912,7 +1016,7 @@ Softened & single & $0.0697$ & $7.09$ & $0.969$ & $0.944$ & $0.061$ & $0.016$ & 
 Strict shared & single & $0.0693$ & $8.00$ & $0.953$ & $0.945$ & $0.061$ & $0.016$ & $0.986$ & $0.255$ & $3.7$ \\
               & selected & $0.0693$ & $8.00$ & $0.953$ & $0.945$ & $0.062$ & $0.016$ & $0.986$ & $0.255$ & $3.7$ \\
 \midrule
-Strict subkey & single & $0.0698$ & $7.71$ & $0.948$ & $0.926$ & $0.062$ & $0.013$ & $0.982$ & $0.222$ & $3.9$ \\
+Cand.-separated & single & $0.0698$ & $7.71$ & $0.948$ & $0.926$ & $0.062$ & $0.013$ & $0.982$ & $0.222$ & $3.9$ \\
 (union) & selected & $0.0861$ & $6.50$ & $0.930$ & $0.891$ & $0.039$ & $0.008$ & $0.973$ & $0.154$ & $3.5$ \\
 \bottomrule
 \end{tabular}
@@ -929,7 +1033,7 @@ Within-prompt statistics over the $16$ candidates (pairwise over the first $8$):
 Arm & Unique fraction & $3$-gram Jaccard & Shared word-prefix \\
 \midrule
 Unwatermarked & $1.00$ & $0.039$ & $1.09$ \\
-Strict subkey (ours) & $1.00$ & $0.038$ & $1.10$ \\
+Candidate-separated (ours) & $1.00$ & $0.038$ & $1.10$ \\
 Softened shared key & $1.00$ & $0.037$ & $2.45$ \\
 Strict shared key & $0.06$ & $1.000$ & $154.3$ \\
 \bottomrule
@@ -1021,7 +1125,7 @@ a small union-detection cost.}
 \toprule
 Arm & Mode & Unique/16 & Reward & Med.\ $z$ & TPR@$.01$ \\
 \midrule
-Unwatermarked (ceiling) & hard-BoN & $16$ & $0.0848$ & --- & --- \\
+Unwatermarked (reference) & hard-BoN & $16$ & $0.0848$ & --- & --- \\
 \midrule
 PF strict shared key & single & \multirow{2}{*}{$1.0$} & $0.0728$ & $6.47$ & $0.922$ \\
  & hard-BoN & & $0.0728$ & $6.47$ & $0.938$ \\
@@ -1036,7 +1140,7 @@ Notes: permute-and-flip is distortion-free with respect to its \emph{own}
 decode law (not the sampling law), so the inherited joint guarantee is
 ``i.i.d.\ from the PF-decode law''; accordingly the shared-key and lifted
 single-sample rewards agree within noise ($0.0728$ vs.\ $0.0716$), and the
-lifted BoN slightly exceeds the \emph{sampling} ceiling because the PF decoder
+lifted BoN lands slightly above the \emph{sampling-based} reference because the PF decoder
 is mildly sharper. Union calibration: FPR $0.055/0.011$ at nominal $0.05/0.01$;
 lifted text under the base key is null ($0.054$ at the $0.05$ level).
 
