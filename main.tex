@@ -472,6 +472,21 @@ key-dependent stress selectors: closure holds within noise for every key-free
 selector, the theorem's key-independence side condition is empirically visible,
 and a worst-case key-oracle evader still faces $0.938$ TPR.
 
+\textbf{Second scheme family (permute-and-flip).}
+Repeating the experiment with the permute-and-flip / exponential watermark
+\citep{zhao2024permute} --- a different deterministic decoder with its own
+detector --- reproduces both the failure and the fix
+(Table~\ref{tab:pf}): the shared key again collapses to $1.0/16$ unique
+candidates and forfeits the BoN gain ($0.0728$ vs.\ ceiling $0.0848$), and the
+lifted version restores $16/16$ unique candidates and full BoN reward
+($0.0874$; permute-and-flip's slightly sharper decoder even exceeds the
+sampling ceiling, consistent with \citealp{zhao2024permute}). Union detection
+calibrates exactly as in the Gumbel case (FPR $0.055/0.011$ at nominal
+$0.05/0.01$; lifted text is null under the base key, $0.054$). One honest
+difference: after reward selection the retained signal is weaker than for
+Gumbel (median $z$ $4.27$, TPR $0.830$ at FPR $0.01$) --- the
+reward--watermark anticorrelation is more pronounced for this scheme.
+
 \textbf{Candidate diversity.}
 Within-prompt statistics confirm closure at the sample level: the subkey arm is
 statistically indistinguishable from unwatermarked sampling
@@ -885,6 +900,39 @@ $0.059$ and median $z$ rises from $4.7$ to $12.9$ across ranks --- i.e.,
 model-typical text is simultaneously reward-preferred and watermark-poor, the
 within-set mirror of the reward--watermark anticorrelation (and the reason
 reward selection mildly weakens any token-level watermark).
+
+\subsection{Second scheme family: permute-and-flip}
+\begin{table}[h]
+\caption{The collapse and the lift on a second scheme family
+(permute-and-flip; LLaMA-3.1-8B-Instruct, $N{=}16$, hard-BoN; TPR at matched
+empirical FPR $0.01$). Same pattern as Gumbel: shared key collapses and
+forfeits the BoN gain; the lift restores i.i.d.\ candidates and full reward at
+a small union-detection cost.}
+\label{tab:pf}
+\begin{center}
+\small
+\begin{tabular}{llcccc}
+\toprule
+Arm & Mode & Unique/16 & Reward & Med.\ $z$ & TPR@$.01$ \\
+\midrule
+Unwatermarked (ceiling) & hard-BoN & $16$ & $0.0848$ & --- & --- \\
+\midrule
+PF strict shared key & single & \multirow{2}{*}{$1.0$} & $0.0728$ & $6.47$ & $0.922$ \\
+ & hard-BoN & & $0.0728$ & $6.47$ & $0.938$ \\
+\midrule
+PF lifted (subkey $+$ union) & single & \multirow{2}{*}{$16.0$} & $0.0716$ & $6.02$ & $0.859$ \\
+ & hard-BoN & & $\mathbf{0.0874}$ & $4.27$ & $0.830$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+Notes: permute-and-flip is distortion-free with respect to its \emph{own}
+decode law (not the sampling law), so the inherited joint guarantee is
+``i.i.d.\ from the PF-decode law''; accordingly the shared-key and lifted
+single-sample rewards agree within noise ($0.0728$ vs.\ $0.0716$), and the
+lifted BoN slightly exceeds the \emph{sampling} ceiling because the PF decoder
+is mildly sharper. Union calibration: FPR $0.055/0.011$ at nominal $0.05/0.01$;
+lifted text under the base key is null ($0.054$ at the $0.05$ level).
 
 \subsection{Calibration}
 Union detector on unwatermarked text ($128$ prompts $\times16$ candidates):
