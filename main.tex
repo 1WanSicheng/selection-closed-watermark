@@ -439,7 +439,7 @@ stream --- e.g., context-hash Gumbel/Aaronson, exponential/inverse-transform
 sampling, tournament sampling, or biased-logit schemes with keyed sampling.
 The \emph{jointly-coupled lift} $\mathrm{JC}_N(W)$ generates candidate
 $i\in[N]$ by running $W$ \emph{unmodified} under the domain-separated subkey
-$\mathrm{SubKey}_i=\mathrm{PRF}(\mathrm{MasterKey},\,i)$; in implementations
+$\mathrm{SubKey}_i=\mathrm{PRF}(\mathrm{MasterKey},\,i)$ \citep{ggm1986}; in implementations
 this is one line --- mix the candidate index into the seed-derivation chain.
 One master key is stored; the derivation is free. (``Jointly coupled'' refers
 to \emph{controlling} the full joint candidate law, not to increasing
@@ -491,6 +491,67 @@ key material, $N$ unbounded); $\mathrm{JC}_N$ is the compact end of this
 axis.
 \end{remark}
 
+A natural worry about the compact end is information-theoretic: the $N$
+subkeys are a deterministic function of one $s$-bit master key, so their
+joint entropy is at most $s$, versus $Ns$ for independently stored keys. Is
+something lost? The next proposition gives the exact account: the deficit is
+real, it is shared by \emph{every} compact-key design, it vanishes in the
+idealized model in which the base guarantee itself is stated, and in the
+concrete model it costs exactly one PRF-security term.
+
+\begin{proposition}[Information-theoretic account of the master key]\label{prop:itcost}
+Let $Q_x$ be the reference candidate law at prompt $x$ and $H_\infty(Q_x)$
+its min-entropy over full candidates; consider decoders that are
+deterministic given their key material (our scheme family).
+\textbf{(i) (Compact keys cannot be statistically closed.)} If the total key
+material is $s$ bits, the candidate-pool law $P_x$ of \emph{any} such scheme
+satisfies
+\[
+\mathrm{TV}\big(P_x,\;Q_x^{\otimes N}\big)\;\ge\;1-2^{\,s-N\,H_\infty(Q_x)} .
+\]
+Hence closure up to total variation $\delta$ forces
+$s\ge N\,H_\infty(Q_x)+\log_2(1-\delta)$: the stored randomness must
+essentially match the min-entropy of the content it imitates. Taking $N{=}1$,
+the same bound shows that the base scheme's \emph{marginal}
+distortion-freeness is itself only computational once the $T$-token content
+entropy exceeds $s$ --- the lift occupies exactly the tier the base scheme
+already occupies.
+\textbf{(ii) (In the ideal-noise model the derivation is lossless.)} In the
+random-function idealization of the per-step noise --- the model in which the
+base scheme's marginal guarantee is exact --- the noise processes read by
+different candidates live on disjoint domains $\{i\}\times\mathcal C$ and
+are therefore \emph{exactly} mutually independent, so $\mathrm{JC}_N$ is
+exactly $N$-selection-closed with no loss whatsoever: the operative resource
+is domain disjointness, not key entropy. (The shared-key collapse, by
+contrast, is model-independent: identical queries return identical noise in
+every model.)
+\textbf{(iii) (Concrete security: one term, one hybrid.)} For any adversary
+running in time $t$ that adaptively chooses prompts, applies any efficient
+key-independent selector, and evaluates any $[0,1]$-bounded functional of the
+candidate pool or released output, the difference between $\mathrm{JC}_N$
+and the independent-key construction is at most
+$\mathrm{Adv}^{\mathrm{prf}}(t+O(q),\,q)$, with $q$ the total number of
+noise queries --- a single hybrid, no factor of $N$. Consequently
+\[
+\mathrm{dist}\big(P_x,\;Q_x^{\otimes N}\big)\;\le\;
+\underbrace{\varepsilon_{\mathrm{prf}}}_{\text{coupling (the lift)}}
+\;+\;N\cdot\underbrace{\varepsilon_{\mathrm{base}}}_{\text{marginal (inherited)}}
+\]
+in the computational metric: subkey derivation contributes exactly one term;
+every other deviation is inherited from the base scheme, not created by the
+lift. Proof in Appendix~\ref{app:proofs}.
+\end{proposition}
+
+Numerically, part (iii) is vacuous at experimental scale in the best sense:
+an AES-based PRF with $s{=}128$, $q\le2^{40}$ queries and $t\le2^{80}$ time
+gives $\varepsilon_{\mathrm{prf}}\le2^{-47}\approx10^{-14}$ --- thirteen
+orders of magnitude below the resolution of our confidence intervals
+($\sim10^{-4}$) --- and the measured oracle-vs-PRF difference of $-0.0003$
+(CI $[-0.0015,0.0009]$, Table~\ref{tab:main}) is the matching empirical cap.
+Part (i) shows the entropy deficit behind the worry is not a defect of PRF
+derivation: any scheme with keys shorter than content entropy has it, and
+only the computational tier is available there.
+
 Theorem~\ref{thm:exactlift} is worth emphasizing: it holds for schemes that
 are \emph{not} distortion-free (e.g., biased-logit families with keyed
 sampling) --- the lift restores candidate i.i.d.-ness over the scheme's own
@@ -501,7 +562,10 @@ each candidate individually inherits the base scheme's single-sample guarantee
 unchanged.
 
 \begin{table}[h]
-\caption{Guarantee levels by construction.}
+\caption{Guarantee levels by construction. $^{\dagger}$Exact in the
+ideal-noise model in which the base marginal guarantee is stated; with a
+concretely instantiated PRF, base and lift guarantees are computational
+alike (Proposition~\ref{prop:itcost}).}
 \label{tab:tiers}
 \begin{center}
 \small
@@ -511,7 +575,7 @@ Construction & Marginal law & Candidate joint law & Selection guarantee \\
 \midrule
 Shared deterministic key & exact & degenerate/correlated & none \\
 Independent candidate keys & exact & exact product & exact closure \\
-PRF-derived subkeys ($\mathrm{JC}_N$) & exact & computationally product & computational closure \\
+PRF-derived subkeys ($\mathrm{JC}_N$) & exact$^{\dagger}$ & computationally product & computational closure \\
 Softened shared key & altered & partially decorrelated & none \\
 \bottomrule
 \end{tabular}
@@ -793,7 +857,10 @@ closure, Appendix~\ref{app:exp}). Candidate separation restores the intended
 candidate law but does not remove the reward--watermark anticorrelation:
 reward selection may still prefer candidates with weaker watermark evidence.
 Computational closure is weaker than adaptive multi-query undetectability
-(Proposition~\ref{prop:hierarchy}). Union detection scales linearly in the
+(Proposition~\ref{prop:hierarchy}); by
+Proposition~\ref{prop:itcost}(i) the computational tier is forced for any
+compact-key design --- statistical closure would require stored key material
+comparable to the content entropy. Union detection scales linearly in the
 number of candidate subkeys, and the verifier must know $N$ or an upper bound.
 The study focuses on deterministic keyed decoder families; our largest
 evaluation uses one instruction-tuned generator, one reward model, and one
@@ -916,7 +983,7 @@ polynomial-time, key-free distinguisher. (This is a property of the entire
 context-hash family, orthogonal to our fix.) Hence the inclusion is strict.
 \qed
 
-\subsection{Proofs of Theorems~\ref{thm:exactlift} and~\ref{thm:lifting}}
+\subsection{Proofs of Theorems~\ref{thm:exactlift} and~\ref{thm:lifting} and Proposition~\ref{prop:itcost}}
 \textbf{Theorem~\ref{thm:exactlift}.} With $N$ independently sampled keys the
 candidates are independent runs of the unmodified base sampler by
 construction, hence i.i.d.\ with law $\mu_W$; the joint \emph{equals}
@@ -943,6 +1010,46 @@ exact under each wrong subkey (the text is independent of that subkey's
 stream), so the union wrapper of
 Proposition~\ref{prop:union} applies verbatim, with its once-per-sequence
 multiplicity cost and index-recovery byproduct. \qed
+
+\begin{proof}[Proof of Proposition~\ref{prop:itcost}]
+\textbf{(i)} Fix the prompt $x$. Because the decoder is deterministic given
+its key material, the candidate pool is a function $Y=f(K,x)$ of the key
+$K$, which takes at most $2^s$ values; hence the support $A$ of $P_x$ has
+$|A|\le2^s$. Every atom of $Q_x^{\otimes N}$ has mass at most
+$2^{-H_\infty(Q_x^{\otimes N})}=2^{-N H_\infty(Q_x)}$, so
+$Q_x^{\otimes N}(A)\le2^{\,s-NH_\infty(Q_x)}$ and
+\[
+\mathrm{TV}\big(P_x,Q_x^{\otimes N}\big)\ \ge\ P_x(A)-Q_x^{\otimes N}(A)
+\ \ge\ 1-2^{\,s-NH_\infty(Q_x)} .
+\]
+Rearranging gives the storage bound; the $N{=}1$ case is the same bound
+applied to a single $T$-token candidate.
+\textbf{(ii)} Let $F$ be a uniformly random function on
+$[N]\times\mathcal C$. Values of a uniformly random function at distinct
+arguments are i.i.d., so the families $\{F(i,c):c\in\mathcal C\}$,
+$i\in[N]$, are mutually independent. Candidate $i$'s run of $W$ reads only
+$F(i,\cdot)$ (a repeated context \emph{within} candidate $i$ rereads the
+same value, exactly as in the base scheme), so the $N$ runs are independent
+and each is a run of $W$ with an ideal noise source --- precisely the
+independent-key construction of Theorem~\ref{thm:exactlift} in the same
+model. Exact closure follows from Theorem~\ref{thm:closure}. Under a shared
+key all candidates query the \emph{same} points and receive the same
+values, in every model.
+\textbf{(iii)} Consider the hybrid in which
+$\mathrm{PRF}(K_{\mathrm{master}},\cdot)$ is replaced by a uniformly
+random function. Under the hybrid, the $N$ subkeys are values of a random
+function at $N$ distinct points --- i.i.d.\ uniform keys --- so the
+construction \emph{is} the independent-key lift. Any procedure (adaptive
+prompt choice, generation, efficient key-independent selection, bounded
+functional evaluation) whose output distribution differs between the two
+constructions by $\varepsilon$ is therefore a PRF distinguisher with
+advantage $\varepsilon$, $q$ oracle queries, and running time $t+O(q)$;
+there is one hybrid step, hence no factor of $N$. For the displayed
+decomposition, first replace the coupling (one PRF term), then compare
+$\mu_W^{\otimes N}$ with $Q_x^{\otimes N}$ by a candidate-by-candidate
+hybrid, which costs $N$ times the base marginal gap; boundedness of the
+functional converts indistinguishability into the expectation bound.
+\end{proof}
 
 \subsection{Proofs of Lemma~\ref{lem:attenuation} and Proposition~\ref{prop:tilt}}
 \emph{Lemma~\ref{lem:attenuation}.} Write the equicorrelated vector as
