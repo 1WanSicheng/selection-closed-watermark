@@ -150,7 +150,8 @@ law; a pool of $N$ candidates generated under one key is governed by its
 higher moments; and detection requires exactly the second-moment deviation
 that selection exposes --- so no detectable watermark can be
 selection-neutral under a shared key, stochastic or deterministic
-(Proposition~\ref{prop:moments}).
+(Proposition~\ref{prop:moments}, sharpening to the selection setting the
+key-collision impossibility of \citealp{keycollision2024}).
 
 \textbf{Formalization.} We define \emph{$N$-selection-closed} distortion-freeness:
 the joint distribution of the $N$ candidates (and hence of the output of \emph{any}
@@ -213,9 +214,12 @@ that softening gives up.
         over the selected output. Candidate correlation $\rho$ attenuates the
         test-time scaling gain by exactly $\sqrt{1-\rho}$. Moreover,
         under a shared key, joint closure at any $N\ge2$ forces the
-        watermark to carry no distributional signal at all: detectability
-        and selection-neutrality are mutually exclusive, for stochastic
-        samplers as well as deterministic ones (\S\ref{sec:theory}).
+        watermark to carry no distributional signal at all --- the
+        selection-level counterpart of the key-collision impossibility of
+        \citet{keycollision2024} --- and we quantify the entire middle
+        range: one key-covariance operator carries detectability, the
+        scaling attenuation, and a selector-uniform drift bound
+        (\S\ref{sec:theory}).
   \item \emph{A minimal selection-compatible lift.} Independently keyed
         candidates give exact joint closure; candidate-specific subkeys
         derived from one master key give computational joint closure under PRF
