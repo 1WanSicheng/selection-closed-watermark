@@ -272,10 +272,16 @@ across generations induce correlations that break distortion-freeness of the
 generated \emph{text}: they formalize per-generation (``weakly'') versus
 joint-across-generations (``strongly'') distortion-freeness and prove the
 strong form unattainable under key collision --- the text-distribution
-antecedent of our Proposition~\ref{prop:moments}(ii). They mitigate the
-bias within a shared key; we characterize the \emph{selection-facing}
-consequence, quantify the drift (Proposition~\ref{prop:drift}), and remove
-the collision across candidates by key separation. Multi-bit watermarking \citep{fernandez2023three} runs detection
+antecedent of our Proposition~\ref{prop:moments}(ii). Their object is the
+corpus-level distribution over repeated queries with \emph{different}
+prompts, where collisions are partial and the bias is spread across the
+corpus, and their remedy mitigates it within the shared key; no selection
+operator appears. Our setting is the $N$-candidate pool for a \emph{single}
+prompt --- the extreme collision, at every step --- where an external
+selector converts the joint correlation into first-order bias of the one
+\emph{released} output; we characterize this selection-facing consequence,
+quantify the drift (Proposition~\ref{prop:drift}), and remove the collision
+across candidates by key separation. Multi-bit watermarking \citep{fernandez2023three} runs detection
 under every message key and takes the best p-value --- the technical
 precedent for our union detector. Prior work thus either uses selection to
 improve watermark strength, or uses selection to recover quality under a
