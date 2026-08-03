@@ -56,7 +56,8 @@ full = np.arange(NP)
 point = {k: stats(k, full) for k in ARMS}
 
 acc = {k: [] for k in ARMS}
-diffs = {"sk_bon-unwm_bon": [], "sk_bon-soft_bon": [], "sk_single-unwm_single": []}
+diffs = {"sk_bon-unwm_bon": [], "sk_bon-soft_bon": [], "sk_single-unwm_single": [],
+         "ss_bon-unwm_bon": [], "soft_bon-unwm_bon": []}
 gr = {"ss": [], "softened": [], "sk": []}
 for _ in range(B):
     idx = rng.integers(0, NP, NP)
@@ -66,6 +67,8 @@ for _ in range(B):
     diffs["sk_bon-unwm_bon"].append(st["sk"][1] - st["unwm"][1])
     diffs["sk_bon-soft_bon"].append(st["sk"][1] - st["softened"][1])
     diffs["sk_single-unwm_single"].append(st["sk"][0] - st["unwm"][0])
+    diffs["ss_bon-unwm_bon"].append(st["ss"][1] - st["unwm"][1])
+    diffs["soft_bon-unwm_bon"].append(st["softened"][1] - st["unwm"][1])
     g_un = st["unwm"][1] - st["unwm"][0]
     for k in gr:
         gr[k].append((st[k][1] - st[k][0]) / g_un)

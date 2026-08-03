@@ -59,7 +59,7 @@ $O(\sqrt{\log N})$ threshold penalty and $N$-fold parallel evaluation. On
 LLaMA-3.1-8B-Instruct, shared-key watermarking produces $1/16$ unique
 candidates and forfeits the full Best-of-$16$ reward gain; candidate-separated
 subkeys restore $16/16$ unique candidates, recover the full available gain
-(reward $0.0861$ vs.\ unwatermarked reference $0.0848$) with each candidate's
+(reward $0.0861$ vs.\ unwatermarked Best-of-$N$ $0.0848$) with each candidate's
 marginal law unchanged, and retain strong post-selection detection
 ($\approx0.3$ z-score cost). The same failure and repair reproduce across a
 second distortion-free decoder family and a family of inference-time
@@ -709,7 +709,11 @@ candidate-separated subkeys (ours) with union detection; the softened
 shared-key workaround of \citet{verma2025watermarking}; and the
 independent-key oracle --- one independently drawn, stored key per candidate,
 the exact tier of Theorem~\ref{thm:exactlift} --- with union detection over
-the stored keys. We report reward of the selected
+the stored keys. Throughout, recovery is judged against \emph{unwatermarked
+Best-of-$N$ at the same $N$}: the object of study is how a watermarked model
+scales with test-time compute, so the relevant reference is what the
+unwatermarked model achieves with the same selection budget, not the
+watermarked single-sample baseline. We report reward of the selected
 output under four selection heads (single, hard-BoN, soft-BoN, Exp-BoN), detection
 median $z$ and TPR, and calibration.
 
@@ -752,23 +756,25 @@ Independent keys $+$ union (oracle) & single & $0.0701$ & $7.56$ & $0.926$ \\
 (1) \emph{Collapse:} strict shared key yields $1.0/16$ unique candidates; all
 selection heads return the single-sample reward $0.0693$ --- the full BoN gain
 ($+0.0155$) is forfeit.
-(2) \emph{Restoration:} subkeys yield $16/16$ unique candidates; single-sample
-reward $0.0698$ vs.\ $0.0703$ unwatermarked (paired difference $-0.0006$,
-$95\%$ CI $[-0.0012,0.0001]$: the candidate marginal is unchanged); hard-BoN
-$0.0861$ vs.\ reference $0.0848$ (paired difference $+0.0013$, CI
-$[0.0002,0.0025]$; prompt resampling does not capture key-realization
-variance --- the run is one draw of the candidate keys --- and under exact
-closure the key-averaged difference is zero, so we read this as full
-recovery). In gain-retained terms
+(2) \emph{Restoration, measured against unwatermarked BoN at the same $N$:}
+paired differences to the unwatermarked hard-BoN reference ($0.0848$) are:
+shared key $-0.0154$ (CI $[-0.0178,-0.0132]$; $81.8\%$ of the reference ---
+the entire selection gain forfeited); softened $+0.0004$ (CI
+$[-0.0007,0.0016]$; $100.5\%$); candidate-separated $+0.0013$ (CI
+$[0.0002,0.0025]$; $101.6\%$); independent-key oracle $+0.0011$ (CI
+$[-0.0001,0.0023]$; $101.3\%$). All three decorrelated arms restore the
+unwatermarked scaling reference; the oracle's interval contains zero, and
+prompt resampling does not capture key-realization variance (each run is one
+key draw; under exact closure the key-averaged difference is zero), so we
+read the candidate-separated arm's small excess as key noise, not
+improvement. Its candidates are meanwhile $16/16$ unique with the marginal
+unchanged (single-sample $0.0698$ vs.\ $0.0703$; paired difference
+$-0.0006$, CI $[-0.0012,0.0001]$), and it is statistically indistinguishable
+from the oracle (paired difference $-0.0003$, CI $[-0.0015,0.0009]$): the
+compact master key matches the exact tier. In gain-retained terms
 ($(R_N{-}R_1)_{\mathrm{method}}/(R_N{-}R_1)_{\mathrm{unwm}}$): shared key
-$0\%$ [$0$--$0$], softened $107\%$ [$100$--$115$], candidate-separated
-$113\%$ [$106$--$121$] (Appendix~\ref{app:ci}) --- the latter two consistent
-with full recovery. The independent-key oracle run behaves identically:
-$16/16$ unique candidates, hard-BoN $0.0858$, paired difference to the PRF
-arm $-0.0003$ (CI $[-0.0015,0.0009]$) and to the unwatermarked reference
-$+0.0011$ (CI $[-0.0001,0.0023]$, containing zero) --- direct evidence that
-the compact-master-key realization matches the exact tier, and that small
-per-run excesses are key-realization noise.
+$0\%$, softened $107\%$ [$100$--$115$], candidate-separated $113\%$
+[$106$--$121$] (Appendix~\ref{app:ci}) --- the same conclusion.
 (3) \emph{Detection:} union costs $8.00\to7.71$ ($\approx0.3$ z); the subkey text is
 null under the base key ($0.057$ at the $0.05$ level) and the union FPR is
 calibrated ($0.055$/$0.012$ at $0.05$/$0.01$).
@@ -1405,6 +1411,8 @@ Cand.-separated & hard-BoN$_{16}$ reward & $0.0861$ & $[0.0826, 0.0898]$ \\
 Cand.-separated & median $z$ (single / post-BoN) & $7.71$ / $6.47$ & $[7.04, 8.31]$ / $[5.79, 6.97]$ \\
 \midrule
 \multicolumn{4}{l}{\emph{Paired differences and ratios:}} \\
+& BoN: shared key $-$ unwm & $-0.0154$ & $[-0.0178, -0.0132]$ \\
+& BoN: softened $-$ unwm & $+0.0004$ & $[-0.0007, 0.0016]$ \\
 & BoN: cand.-sep.\ $-$ unwm & $+0.0013$ & $[0.0002, 0.0025]$ \\
 & BoN: cand.-sep.\ $-$ softened & $+0.0009$ & $[-0.0003, 0.0021]$ \\
 & single: cand.-sep.\ $-$ unwm & $-0.0006$ & $[-0.0012, 0.0001]$ \\
