@@ -144,7 +144,13 @@ reward-based selector while leaving every marginal unchanged --- and
 distinctness of candidates alone does not give a correct selected-output
 distribution. Our contribution is to identify and characterize the required
 joint guarantee; candidate-specific domain separation is then the minimal
-construction that realizes it.
+construction that realizes it. The tension is structural: the certification
+constrains only the first moment, over keys, of the key-conditional output
+law; a pool of $N$ candidates generated under one key is governed by its
+higher moments; and detection requires exactly the second-moment deviation
+that selection exposes --- so no detectable watermark can be
+selection-neutral under a shared key, stochastic or deterministic
+(Proposition~\ref{prop:moments}).
 
 \textbf{Formalization.} We define \emph{$N$-selection-closed} distortion-freeness:
 the joint distribution of the $N$ candidates (and hence of the output of \emph{any}
@@ -205,8 +211,11 @@ that softening gives up.
         law is \emph{necessary and sufficient} for closure under every
         key-independent selector; marginal preservation alone gives no control
         over the selected output. Candidate correlation $\rho$ attenuates the
-        test-time scaling gain by exactly $\sqrt{1-\rho}$
-        (\S\ref{sec:theory}).
+        test-time scaling gain by exactly $\sqrt{1-\rho}$. Moreover,
+        under a shared key, joint closure at any $N\ge2$ forces the
+        watermark to carry no distributional signal at all: detectability
+        and selection-neutrality are mutually exclusive, for stochastic
+        samplers as well as deterministic ones (\S\ref{sec:theory}).
   \item \emph{A minimal selection-compatible lift.} Independently keyed
         candidates give exact joint closure; candidate-specific subkeys
         derived from one master key give computational joint closure under PRF
@@ -224,7 +233,9 @@ that softening gives up.
         stress selectors, candidate separation restores the reward and
         diversity behavior of independent inference while retaining strong
         detection; the same pattern holds for a second deterministic
-        distortion-free decoder family (\S\ref{sec:experiments}).
+        distortion-free decoder family, and a biased-logit family (KGW)
+        collapses exactly when derandomized and is repaired with its
+        detector unchanged (\S\ref{sec:experiments}).
 \end{enumerate}
 
 \section{Related Work}\label{sec:related}
@@ -407,6 +418,51 @@ positive direction directly covers practical inference-time selectors ---
 hard and soft Best-of-$N$, reward reranking, verifier selection, rejection
 sampling, filter-and-sample, and randomized voting rules --- provided the
 selector does not access the watermark key.
+
+Theorem~\ref{thm:closure} states what must hold. The next result explains
+why no shared-key design can provide it: distortion-freeness constrains the
+key-\emph{averaged} output law --- a first moment --- while detection
+requires the key to leave a distributional trace, and the two demands collide
+at the second moment.
+
+\begin{proposition}[Detectability excludes closure under a shared key]\label{prop:moments}
+Let $K\sim\kappa$ be the key, $P_K$ the key-conditional output law at a
+fixed prompt, and let the $N$ candidates be conditionally i.i.d.\ given $K$
+(deterministic decoders are the degenerate case $P_K=\delta_{f(K,x)}$;
+sharing randomness beyond the key only increases dependence).
+\textbf{(i)} Marginal distortion-freeness is the first-moment constraint
+$\mathbb E_K[P_K]=Q_x$, while the candidate pool follows
+$\mathbb E_K[P_K^{\otimes N}]$ --- the $N$-th moment of the random measure
+$P_K$. Test-time scaling therefore evaluates moments that the single-sample
+certification never constrained.
+\textbf{(ii)} The following are equivalent:
+(a) $\mathbb E_K[P_K^{\otimes N}]=Q_x^{\otimes N}$ for some $N\ge2$;
+(b) the same for every $N$;
+(c) $P_K=Q_x$ for $\kappa$-a.e.\ $K$.
+Under (c) the watermark leaves no distributional trace: even a verifier who
+knows $K$ has zero advantage from any number of samples.
+\textbf{(iii)} Hence every detectable watermark fails joint closure under a
+shared key; determinism sets only the \emph{magnitude}, via
+\[
+\mathrm{Cov}\big(g(Y_i),g(Y_j)\big)
+=\mathrm{Var}_K\big(\mathbb E[g(Y)\mid K]\big)\qquad(i\ne j)
+\]
+for every key-independent statistic $g$: the equicorrelation of
+Lemma~\ref{lem:attenuation} is the intraclass coefficient
+$\rho_g=\mathrm{Var}_K(\mathbb E[g\mid K])/\mathrm{Var}(g(Y))$, equal to
+$1$ for deterministic decoders (complete collapse) and to $0$ only when the
+key does not move the conditional mean of $g$. Proof in
+Appendix~\ref{app:proofs}.
+\end{proposition}
+
+The dichotomy sharpens \S\ref{sec:collapse}: the collapse of deterministic
+decoders is the extreme point $\rho_g=1$ of a constraint that binds every
+detectable watermark. A stochastic sampler sits toward the other end --- for
+published KGW at $\delta{=}2$ we measure no attenuation within noise
+(Appendix~\ref{app:kgw}) --- but reaching $\rho_g=0$ exactly, for all $g$,
+means erasing the key's distributional trace altogether. The only exits are
+undetectability or ceasing to share the key across candidates; the lift of
+\S\ref{sec:method} is the second exit.
 
 \begin{proposition}[Hierarchy]\label{prop:hierarchy}
 As classes of watermarked samplers,
@@ -816,6 +872,17 @@ difference: after reward selection the retained signal is weaker than for
 Gumbel (median $z$ $4.27$, TPR $0.830$ at FPR $0.01$) --- the
 reward--watermark anticorrelation is more pronounced for this scheme.
 
+\textbf{Third scheme family (biased-logit KGW).}
+Published KGW samples with fresh randomness, so its pool does not collapse,
+and at $\delta{=}2$ we measure no scaling attenuation --- the negative
+control predicted by Proposition~\ref{prop:moments}(iii); its costs are
+marginal (it is not distortion-free). Derandomizing the sampler --- the
+design point of deterministic deployments --- produces the collapse, and
+separating the sampling stream per candidate repairs it \emph{with the
+detector unchanged}: KGW's detector reads only the greenlist, which stays on
+the base key, so this family pays no union cost at all. Numbers in
+Appendix~\ref{app:kgw}.
+
 \textbf{Candidate diversity.}
 Within-prompt statistics confirm closure at the sample level: the subkey arm is
 statistically indistinguishable from unwatermarked sampling
@@ -961,6 +1028,34 @@ monotonically increasing in $N$. The shared-key deterministic scheme of
 \S\ref{sec:collapse} realizes exactly this coupling (all candidates identical),
 so the bound is attained by the shared-key instantiation, not only in the worst case. \qed
 \end{example}
+
+\subsection{Proof of Proposition~\ref{prop:moments}}
+\begin{proof}
+\textbf{(i)} Conditional independence gives, for measurable
+$A_1,\dots,A_N$,
+$\Pr[Y_1\in A_1,\dots,Y_N\in A_N]=\mathbb E_K\prod_{i\le N}P_K(A_i)$;
+the marginal constraint is the case $N{=}1$.
+\textbf{(ii)} (a)$\Rightarrow$(c): projecting onto two coordinates reduces
+any $N\ge2$ to $N{=}2$. The outcome space (finite token sequences) is
+countable; fix a sequence $y$ and take $A_1=A_2=\{y\}$:
+$\mathbb E[P_K(y)^2]=Q_x(y)^2$, while the one-coordinate projection gives
+$\mathbb E[P_K(y)]=Q_x(y)$; hence $\mathrm{Var}_K(P_K(y))=0$ and
+$P_K(y)=Q_x(y)$ almost surely. A countable union of null sets yields
+$P_K=Q_x$ a.s. (c)$\Rightarrow$(b)$\Rightarrow$(a) are immediate. For the
+detection claim: on the event $P_K=Q_x$, the conditional law of any number
+of samples equals the null law, so every test statistic has the same
+distribution under both hypotheses.
+\textbf{(iii)} If the scheme is not marginally distortion-free, closure
+fails already at one coordinate. If it is, and it is detectable, then
+$P_K\ne Q_x$ on a key set of positive measure, so for some sequence $y$ the
+variable $P_K(y)$ is nonconstant with mean $Q_x(y)$; taking
+$g=\mathbf 1\{Y=y\}$ gives $\mathrm{Var}_K(\mathbb E[g\mid K])>0$, and
+the joint law differs from the product. The covariance identity is
+conditional independence plus the tower rule:
+$\mathbb E[g(Y_i)g(Y_j)]=\mathbb E_K[\mathbb E[g\mid K]^2]$ for
+$i\ne j$. For a deterministic decoder, $\mathbb E[g\mid K]=g(f(K,x))$, so
+$\mathrm{Var}_K(\mathbb E[g\mid K])=\mathrm{Var}(g(Y))$ and $\rho_g=1$.
+\end{proof}
 
 \subsection{Proof of Proposition~\ref{prop:hierarchy}}
 \textbf{(i) $N$-selection-closedness $\Rightarrow$ marginal
@@ -1378,6 +1473,49 @@ single-sample rewards agree within noise ($0.0728$ vs.\ $0.0716$), and the
 lifted BoN lands slightly above the \emph{sampling-based} reference because the PF decoder
 is mildly sharper. Union calibration: FPR $0.055/0.011$ at nominal $0.05/0.01$;
 lifted text under the base key is null ($0.054$ at the $0.05$ level).
+
+\subsection{Third scheme family: biased-logit (KGW)}\label{app:kgw}
+Published KGW biases greenlist logits by $\delta$ and \emph{samples}; each
+candidate consumes fresh randomness, so the pool does not collapse: $16/16$
+unique candidates, and the normalized Best-of-$16$ gain (the BoN gain divided
+by the within-prompt reward spread) is $1.62$ vs.\ $1.67$ unwatermarked ---
+no measurable attenuation, consistent with $\rho_g\approx0$ in
+Proposition~\ref{prop:moments}(iii). Its cost lies on the marginal axis, as
+the scheme is not distortion-free: single-sample reward $0.0654$ vs.\
+$0.0703$, median perplexity $5.67$ vs.\ $3.82$; Best-of-$16$ recovers most
+but not all of the gap ($0.0837$ vs.\ $0.0848$) --- selection compensates
+marginal distortion \citep{verma2025watermarking} but cannot remove it.
+
+Derandomizing the sampler (keyed inverse-CDF sampling of the biased
+distribution, deterministic given key and context --- the design point of
+deterministic deployments such as SynthID-Text, and of any pipeline that
+requires reproducible generation for caching or audit) produces exactly the
+collapse of \S\ref{sec:collapse}; separating the \emph{sampling} stream
+per candidate (greenlist untouched) restores it. Because the detector reads
+only the greenlist, which remains keyed exactly as before, the detector is
+unchanged: no union test and no threshold cost --- for this family the lift
+is free on the detection side.
+
+\begin{table}[h]
+\caption{Biased-logit family (KGW, $\gamma{=}0.25$, $\delta{=}2$;
+LLaMA-3.1-8B-Instruct, $N{=}16$). The published stochastic sampler does not
+collapse (negative control); derandomization collapses; per-candidate
+sampling streams restore BoN with the detector unchanged.}
+\label{tab:kgw}
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Construction & Single & BoN$_{16}$ & Unique$/16$ & $z$ (single) & $z$ (post-BoN) \\
+\midrule
+Unwatermarked & $0.0703$ & $0.0848$ & $16.0$ & --- & --- \\
+KGW, stochastic (published) & $0.0654$ & $0.0837$ & $16.0$ & $6.49$ & $5.14$ \\
+KGW, derandomized, shared stream & $0.0645$ & $0.0645$ & $1.0$ & $6.33$ & $6.33$ \\
+KGW, derandomized, per-candidate streams & $0.0655$ & $0.0840$ & $16.0$ & $6.55$ & $5.50$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
 
 \subsection{Uncertainty quantification}\label{app:ci}
 All confidence intervals are $95\%$ paired-bootstrap intervals over the $128$
