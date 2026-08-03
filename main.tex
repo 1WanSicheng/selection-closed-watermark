@@ -265,8 +265,13 @@ itself, choosing among drafts by watermark score (WaterSearch also uses
 per-candidate seeds as a mechanism, without a distributional analysis of the
 resulting candidate pool). \citet{keycollision2024} show that key collisions
 across generations induce correlations that break distortion-freeness of the
-generated \emph{text}; they study the text distribution, not an external
-selector. Multi-bit watermarking \citep{fernandez2023three} runs detection
+generated \emph{text}: they formalize per-generation (``weakly'') versus
+joint-across-generations (``strongly'') distortion-freeness and prove the
+strong form unattainable under key collision --- the text-distribution
+antecedent of our Proposition~\ref{prop:moments}(ii). They mitigate the
+bias within a shared key; we characterize the \emph{selection-facing}
+consequence, quantify the drift (Proposition~\ref{prop:drift}), and remove
+the collision across candidates by key separation. Multi-bit watermarking \citep{fernandez2023three} runs detection
 under every message key and takes the best p-value --- the technical
 precedent for our union detector. Prior work thus either uses selection to
 improve watermark strength, or uses selection to recover quality under a
@@ -419,6 +424,16 @@ hard and soft Best-of-$N$, reward reranking, verifier selection, rejection
 sampling, filter-and-sample, and randomized voting rules --- provided the
 selector does not access the watermark key.
 
+The scope of the standard guarantee is worth fixing precisely, since our
+argument turns on it. The definitions in the literature are per-generation
+and key-averaged: \citet{kuditipudi2023robust} (Definition~1) require
+$\Pr_\xi\big(\Gamma(\xi,\mu)=y\big)=\mu(y)$ --- one decode,
+probability over the watermark randomness $\xi$ --- and
+\citet{keycollision2024} name exactly this notion \emph{weakly}
+distortion-free, reserving \emph{strongly} for the joint law of several
+generations. Nothing in the weak form constrains a candidate pool drawn
+under one key realization.
+
 Theorem~\ref{thm:closure} states what must hold. The next result explains
 why no shared-key design can provide it: distortion-freeness constrains the
 key-\emph{averaged} output law --- a first moment --- while detection
@@ -462,7 +477,63 @@ published KGW at $\delta{=}2$ we measure no attenuation within noise
 (Appendix~\ref{app:kgw}) --- but reaching $\rho_g=0$ exactly, for all $g$,
 means erasing the key's distributional trace altogether. The only exits are
 undetectability or ceasing to share the key across candidates; the lift of
-\S\ref{sec:method} is the second exit.
+\S\ref{sec:method} is the second exit. Part (ii) recovers, at the
+candidate-pool level, the impossibility of strong distortion-freeness under
+key collision \citep[Theorem~4.10]{keycollision2024}; parts (i) and (iii)
+are the selection-facing additions. The dichotomy, however, is only the
+endpoint --- the next result replaces it with a quantitative law for the
+whole range between ``no watermark'' and ``complete collapse''.
+
+\begin{proposition}[The key-covariance operator and the size of the drift]\label{prop:drift}
+Assume the setting of Proposition~\ref{prop:moments} with marginal
+distortion-freeness, $P_K\ll Q_x$ and
+$f_K=\mathrm dP_K/\mathrm dQ_x\in L^2(Q_x)$. Define the
+\emph{key-covariance operator} $C=\mathbb E_K[(f_K-1)\otimes(f_K-1)]$ on
+$L^2(Q_x)$ and the kernel
+$\rho(K,K')=\langle f_K-1,\,f_{K'}-1\rangle_{L^2(Q_x)}$ for independent
+copies $K,K'$.
+\textbf{(i) One object, three roles.}
+$\operatorname{tr}C=\mathbb E_K\big[\chi^2(P_K\Vert Q_x)\big]$ is the
+single-sample, key-informed detectability; for any statistic $g$ with
+$\mathrm{Var}\,g(Y)=1$ and centering $\bar g=g-\mathbb E_{Q_x}g$, the
+intraclass correlation of Proposition~\ref{prop:moments}(iii) is the
+quadratic form $\rho_g=\langle\bar g,\,C\bar g\rangle$; and $C=0$ iff
+$P_K=Q_x$ a.s.\ (the dichotomy).
+\textbf{(ii) Exact drift identity.}
+\[
+1+\chi^2\big(\mathbb E_K[P_K^{\otimes N}]\,\big\Vert\,Q_x^{\otimes N}\big)
+=\mathbb E_{K,K'}\big[(1+\rho(K,K'))^N\big].
+\]
+Marginal distortion-freeness is equivalent to $\mathbb E_K[f_K]=1$, which
+forces $\mathbb E_{K,K'}[\rho]=0$ and cancels the first-order ($O(N)$)
+term of the expansion --- that cancellation is precisely, and only, what the
+marginal certification buys.
+\textbf{(iii) Quadratic growth and a selector-uniform bound.} Let
+$\rho_{\max}=\operatorname{ess\,sup}|\rho(K,K')|$. If
+$N\rho_{\max}\le\tfrac12$, then
+\[
+\chi^2=\binom N2\,\Vert C\Vert_{\mathrm{HS}}^2\,(1+\theta),
+\qquad|\theta|\le N\rho_{\max},
+\]
+and by data processing every key-independent selector obeys
+\[
+\mathrm{TV}\big(\text{selected law},\;\text{reference selected law}\big)
+\;\le\;\mathrm{TV}\big(\mathbb E_K[P_K^{\otimes N}],\,Q_x^{\otimes N}\big)
+\;\le\;\tfrac12\sqrt{\chi^2}\;\le\;\tfrac N2\,\Vert C\Vert_{\mathrm{HS}} .
+\]
+Proof in Appendix~\ref{app:proofs}.
+\end{proposition}
+
+In words: under marginal distortion-freeness the joint drift is
+second-moment driven; it grows quadratically in $N$ on the $\chi^2$ scale
+(linearly on the TV scale); and one operator controls everything ---
+its trace is detectability, its quadratic forms are the correlations that
+attenuate test-time scaling (Lemma~\ref{lem:attenuation}), its
+Hilbert--Schmidt norm sets the drift rate, and it vanishes exactly on the
+undetectable schemes. The small-$\rho$ regime covers schemes with fresh
+per-step randomness (stochastic KGW, random offsets); deterministic decoders
+sit at the opposite extreme ($f_K$ a point-mass density), where the collapse
+analysis of \S\ref{sec:collapse} applies instead.
 
 \begin{proposition}[Hierarchy]\label{prop:hierarchy}
 As classes of watermarked samplers,
@@ -1055,6 +1126,38 @@ conditional independence plus the tower rule:
 $\mathbb E[g(Y_i)g(Y_j)]=\mathbb E_K[\mathbb E[g\mid K]^2]$ for
 $i\ne j$. For a deterministic decoder, $\mathbb E[g\mid K]=g(f(K,x))$, so
 $\mathrm{Var}_K(\mathbb E[g\mid K])=\mathrm{Var}(g(Y))$ and $\rho_g=1$.
+\end{proof}
+
+\subsection{Proof of Proposition~\ref{prop:drift}}
+\begin{proof}
+\textbf{(i)} $\operatorname{tr}C=\mathbb E_K\Vert f_K-1\Vert^2
+=\mathbb E_K\int(f_K-1)^2\,\mathrm dQ_x=\mathbb E_K[\chi^2(P_K\Vert Q_x)]$.
+For centered $\bar g$, $\mathbb E[g(Y)\mid K]-\mathbb E_{Q_x}g
+=\langle\bar g,f_K-1\rangle$ (using $\mathbb E_K[f_K]=1$), so
+$\mathrm{Var}_K(\mathbb E[g\mid K])
+=\mathbb E_K\langle\bar g,f_K-1\rangle^2=\langle\bar g,C\bar g\rangle$.
+$C=0$ iff $\operatorname{tr}C=0$ iff $f_K=1$ a.s.
+\textbf{(ii)} The mixture's density w.r.t.\ $Q_x^{\otimes N}$ is
+$h(y_{1:N})=\mathbb E_K\prod_{i\le N}f_K(y_i)$, so
+$1+\chi^2=\int h^2\,\mathrm dQ_x^{\otimes N}
+=\mathbb E_{K,K'}\prod_{i\le N}\int f_Kf_{K'}\,\mathrm dQ_x
+=\mathbb E_{K,K'}\big[(1+\rho(K,K'))^N\big]$ by Fubini
+($f_K\in L^2$). Since $K\perp K'$,
+$\mathbb E_{K,K'}[\rho]=\Vert\mathbb E_K[f_K]-1\Vert^2$, which vanishes
+iff $\mathbb E_K[f_K]=1$, i.e., iff the scheme is marginally
+distortion-free; the binomial term $N\,\mathbb E[\rho]$ then drops.
+\textbf{(iii)} Expanding and using $\mathbb E[\rho]=0$,
+$\chi^2=\binom N2\mathbb E[\rho^2]+\sum_{k\ge3}\binom Nk\mathbb E[\rho^k]$
+with $\mathbb E[\rho^2]=\Vert C\Vert_{\mathrm{HS}}^2$. Bounding
+$|\mathbb E[\rho^k]|\le\mathbb E[\rho^2]\rho_{\max}^{k-2}$ and
+$\binom Nk\le\binom N2\,\tfrac{2}{k!}N^{k-2}$ gives
+$|\theta|\le2\sum_{k\ge3}(N\rho_{\max})^{k-2}/k!
+\le\tfrac13\,\tfrac{N\rho_{\max}}{1-N\rho_{\max}}\le N\rho_{\max}$
+for $N\rho_{\max}\le\tfrac12$. The TV chain is data processing (a
+key-independent selector is a Markov kernel on the candidate tuple),
+Cauchy--Schwarz ($2\,\mathrm{TV}=\int|h-1|\le\sqrt{\chi^2}$), and
+$\tfrac12\sqrt{\binom N2(1+\theta)}\le\tfrac N2$ for
+$|\theta|\le\tfrac12$.
 \end{proof}
 
 \subsection{Proof of Proposition~\ref{prop:hierarchy}}
