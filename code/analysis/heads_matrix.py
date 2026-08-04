@@ -58,12 +58,20 @@ HEADS = [("single", None), ("bon", None),
          ("bop", 3.), ("bop", 15.),
          ("bol", 0.02), ("bol", 0.1)]
 
-def run(tag, path):
+def null_quantile(nullpath, alpha=0.01):
+    ps = []
+    for l in open(os.path.join(DATA, nullpath)):
+        d = json.loads(l)
+        ps += [min(max(x, 1e-300), 1.) for x in d["cands_pvalue"] if x == x]
+    return float(np.quantile(np.array(ps), alpha))
+
+def run(tag, path, nullpath=None):
     A = load_arm(path)
+    pstar = null_quantile(nullpath) if nullpath else None
     rng = np.random.default_rng(3)
     row = {}
     for head, par in HEADS:
-        rs, zs, hits = [], [], []
+        rs, zs, hits, mtpr = [], [], [], []
         for r, p in A:
             w = head_weights(r, head, par, rng)
             rs.append(float(w @ r))
@@ -71,19 +79,26 @@ def run(tag, path):
                 z = norm.isf(p)
                 zs.append(float(w @ z))
                 hits.append(float(w @ (p < 0.01)))
+                if pstar is not None:
+                    mtpr.append(float(w @ (p <= pstar)))
         key = head + ("" if par is None else str(par))
         row[key] = (np.mean(rs),
                     (np.median(zs) if zs else None),
-                    (np.mean(hits) if hits else None))
+                    (np.mean(hits) if hits else None),
+                    (np.mean(mtpr) if mtpr else None))
     return row
 
 if __name__ == "__main__":
-    arms = [a.split(":", 1) for a in sys.argv[1:]]
+    arms = [a.split(":") for a in sys.argv[1:]]
     hdr = ["single", "bon", "sbon0.02", "sbon0.1", "bop3.0", "bop15.0", "bol0.02", "bol0.1"]
     print("%-12s %-8s" % ("arm", "metric") + "".join("%9s" % h for h in hdr))
-    for tag, path in arms:
-        row = run(tag, path)
+    for spec in arms:
+        tag, path = spec[0], spec[1]
+        nullpath = spec[2] if len(spec) > 2 else None
+        row = run(tag, path, nullpath)
         print("%-12s %-8s" % (tag, "reward") + "".join("%9.4f" % row[h][0] for h in hdr))
         if row["bon"][1] is not None:
             print("%-12s %-8s" % ("", "med z") + "".join("%9.2f" % row[h][1] for h in hdr))
             print("%-12s %-8s" % ("", "p<.01") + "".join("%9.3f" % row[h][2] for h in hdr))
+            if row["bon"][3] is not None:
+                print("%-12s %-8s" % ("", "mTPR.01") + "".join("%9.3f" % row[h][3] for h in hdr))
