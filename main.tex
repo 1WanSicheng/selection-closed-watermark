@@ -1587,6 +1587,127 @@ lifted BoN lands slightly above the \emph{sampling-based} reference because the 
 is mildly sharper. Union calibration: FPR $0.055/0.011$ at nominal $0.05/0.01$;
 lifted text under the base key is null ($0.054$ at the $0.05$ level).
 
+\subsection{Selection-head matrix on base and instruct models}\label{app:matrix}
+We extend the evaluation to a family of reward-selection heads on two
+generators --- the instruction-tuned model used in the main text and its
+\emph{base} (pre-alignment) counterpart, LLaMA-3.1-8B --- across seven
+watermark arms. Heads: \textbf{single} (one draw); hard \textbf{BoN};
+\textbf{SBoN}$(\lambda)$, softmax selection with weights
+$\propto e^{r_i/\lambda}$ \citep{verdun2025soft} ($\lambda$ is a
+temperature: $\lambda\to0$ recovers BoN); \textbf{BoP}$(\mu)$,
+Best-of-Poisson \citep{khalaf2025hedging}: the sample count is
+$1+\mathrm{Poisson}(\mu)$, then hard max (computed exactly by order
+statistics over the $16$-candidate pool, capped at the pool);
+\textbf{BoL}$(b)$, a control head of our own --- $\arg\max$ of rewards
+perturbed by $\mathrm{Laplace}(0,b)$ noise --- included to test whether the
+perturbation family matters. Reward is the mean (over prompts) of the head's
+expected selected reward; median $z$ is the median over prompts of the
+expected selected z-score under the arm's own detector; $p{<}.01$ is the
+expected detection rate at the nominal $0.01$ level.
+
+Three regularities hold in every arm and on both models
+(Tables~\ref{tab:matrix_instr} and~\ref{tab:matrix_base}).
+(1) \emph{One dial:} rewards order as single
+$<$ SBoN$(.1)\!\approx\!$BoL$(.1)$ $<$ SBoN$(.02)\!\approx\!$BoL$(.02)$
+$<$ BoP$(3)$ $<$ BoP$(15)\!\approx\!$BoN, and detection orders exactly in
+reverse --- the head parameter positions the output on a single
+reward--evidence trade-off, and the perturbation family (Gumbel vs.\
+Laplace vs.\ Poissonized $n$) is immaterial at matched strength, as
+Proposition~\ref{prop:tilt} predicts (the tilt is proportional to the
+selection pressure on reward, with slope set by the within-pool
+reward--signal anticorrelation).
+(2) \emph{Head-wise closure:} the candidate-separated arms track the
+unwatermarked arm head by head, not only at hard BoN.
+(3) \emph{Flat lines:} the shared-key arms are constant across all heads
+--- with $1.0/16$ unique candidates every selection head degenerates to
+single --- while the base model amplifies everything else: twice the BoN
+gain ($0.0301$ vs.\ $0.0145$), much stronger per-text evidence
+($z\approx13$ vs.\ $8$ for the shared Gumbel key), and a larger selection
+tilt ($-4.6$ vs.\ $-1.5$ z at hard BoN), consistent with the higher entropy
+of pre-alignment text.
+
+\begin{table}[h]
+\caption{Selection-head matrix, \textbf{instruct} model
+(LLaMA-3.1-8B-Instruct, $128$ prompts $\times$ $16$ candidates). Shared-key
+rows are flat: every head degenerates to single.}
+\label{tab:matrix_instr}
+\begin{center}
+\scriptsize
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{llcccccccc}
+\toprule
+Arm & Metric & single & BoN & SBoN$_{.02}$ & SBoN$_{.1}$ & BoP$_{3}$ & BoP$_{15}$ & BoL$_{.02}$ & BoL$_{.1}$ \\
+\midrule
+Unwatermarked & reward & .0703 & .0848 & .0740 & .0712 & .0783 & .0844 & .0743 & .0712 \\
+\midrule
+KGW ($\delta{=}2$, stochastic) & reward & .0654 & .0837 & .0714 & .0669 & .0758 & .0832 & .0717 & .0669 \\
+ & med.\ $z$ & 6.75 & 5.14 & 6.39 & 6.69 & 5.85 & 5.14 & 6.23 & 6.68 \\
+ & $p{<}.01$ & .950 & .891 & .937 & .948 & .925 & .895 & .935 & .948 \\
+\midrule
+Gumbel, softened & reward & .0697 & .0852 & .0738 & .0707 & .0782 & .0847 & .0741 & .0707 \\
+ & med.\ $z$ & 7.35 & 5.62 & 6.87 & 7.29 & 6.64 & 5.75 & 6.86 & 7.29 \\
+ & $p{<}.01$ & .944 & .906 & .936 & .942 & .926 & .915 & .936 & .942 \\
+\midrule
+Gumbel, shared key & reward & .0693 & .0693 & .0693 & .0693 & .0693 & .0693 & .0693 & .0693 \\
+ & med.\ $z$ & 8.00 & 8.00 & 8.00 & 8.00 & 8.00 & 8.00 & 8.00 & 8.00 \\
+\midrule
+Gumbel, cand.-separated & reward & .0698 & .0861 & .0745 & .0709 & .0789 & .0856 & .0748 & .0710 \\
+ & med.\ $z$ & 7.97 & 6.47 & 7.57 & 7.86 & 7.16 & 6.40 & 7.54 & 7.84 \\
+ & $p{<}.01$ & .926 & .891 & .915 & .923 & .908 & .892 & .914 & .923 \\
+\midrule
+PF, shared key & reward & .0728 & .0728 & .0728 & .0728 & .0728 & .0728 & .0728 & .0728 \\
+ & med.\ $z$ & 6.47 & 6.47 & 6.47 & 6.47 & 6.47 & 6.47 & 6.47 & 6.47 \\
+\midrule
+PF, cand.-separated & reward & .0716 & .0874 & .0758 & .0726 & .0802 & .0869 & .0761 & .0726 \\
+ & med.\ $z$ & 6.23 & 4.25 & 5.72 & 6.04 & 5.16 & 4.31 & 5.68 & 6.07 \\
+ & $p{<}.01$ & .864 & .797 & .849 & .861 & .836 & .809 & .848 & .861 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{table}[h]
+\caption{Selection-head matrix, \textbf{base} model (LLaMA-3.1-8B, same
+prompts and configuration). Null calibration on this model: FPR at nominal
+$0.05$/$0.01$ is $0.055$/$0.011$ (Gumbel base key), $0.053$/$0.011$ (PF base
+key), $0.062$/$0.016$ (KGW), $0.067$/$0.015$ and $0.068$/$0.020$ (Gumbel/PF
+union over $16$ subkeys); $2048$ unwatermarked texts.}
+\label{tab:matrix_base}
+\begin{center}
+\scriptsize
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{llcccccccc}
+\toprule
+Arm & Metric & single & BoN & SBoN$_{.02}$ & SBoN$_{.1}$ & BoP$_{3}$ & BoP$_{15}$ & BoL$_{.02}$ & BoL$_{.1}$ \\
+\midrule
+Unwatermarked & reward & .0391 & .0692 & .0535 & .0423 & .0558 & .0684 & .0543 & .0425 \\
+\midrule
+KGW ($\delta{=}2$, stochastic) & reward & .0335 & .0654 & .0489 & .0368 & .0506 & .0645 & .0499 & .0371 \\
+ & med.\ $z$ & 8.55 & 6.08 & 7.49 & 8.32 & 7.42 & 6.05 & 7.39 & 8.33 \\
+ & $p{<}.01$ & .963 & .867 & .923 & .957 & .922 & .863 & .919 & .956 \\
+\midrule
+Gumbel, softened & reward & .0362 & .0663 & .0508 & .0394 & .0529 & .0655 & .0516 & .0397 \\
+ & med.\ $z$ & 12.52 & 7.69 & 10.78 & 12.15 & 10.27 & 7.94 & 10.59 & 12.18 \\
+ & $p{<}.01$ & .981 & .969 & .974 & .980 & .971 & .968 & .974 & .979 \\
+\midrule
+Gumbel, shared key & reward & .0343 & .0343 & .0343 & .0343 & .0343 & .0343 & .0343 & .0343 \\
+ & med.\ $z$ & 13.33 & 13.33 & 13.33 & 13.33 & 13.33 & 13.33 & 13.33 & 13.33 \\
+\midrule
+Gumbel, cand.-separated & reward & .0349 & .0688 & .0528 & .0391 & .0536 & .0679 & .0538 & .0394 \\
+ & med.\ $z$ & 13.56 & 8.99 & 11.07 & 13.15 & 11.18 & 8.96 & 10.85 & 13.13 \\
+ & $p{<}.01$ & .981 & .953 & .966 & .978 & .964 & .952 & .965 & .978 \\
+\midrule
+PF, shared key & reward & .0369 & .0369 & .0369 & .0369 & .0369 & .0369 & .0369 & .0369 \\
+ & med.\ $z$ & 11.68 & 11.68 & 11.68 & 11.68 & 11.68 & 11.68 & 11.68 & 11.68 \\
+\midrule
+PF, cand.-separated & reward & .0359 & .0695 & .0532 & .0400 & .0546 & .0685 & .0542 & .0402 \\
+ & med.\ $z$ & 11.62 & 7.03 & 9.72 & 11.32 & 9.59 & 7.42 & 9.52 & 11.27 \\
+ & $p{<}.01$ & .977 & .938 & .960 & .974 & .960 & .939 & .958 & .974 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
 \subsection{Third scheme family: biased-logit (KGW)}\label{app:kgw}
 Published KGW biases greenlist logits by $\delta$ and \emph{samples}; each
 candidate consumes fresh randomness, so the pool does not collapse: $16/16$
