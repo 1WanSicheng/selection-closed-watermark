@@ -819,6 +819,13 @@ $\sqrt{2\ln N}$ rate --- the shape of Figure~\ref{fig:realshift} (right).
 Proof in Appendix~\ref{app:proofs}.
 \end{proposition}
 
+Like the multiplicity correction, the tilt is a once-per-sequence, $O(1)$
+quantity on the z-scale ($\sigma_z$ does not grow with text length, and
+$m_N$ grows only as $\sqrt{2\ln N}$), while the signal grows as
+$\Theta(\sqrt T)$: measured per token, \emph{every} selection-era
+detection cost --- threshold inflation and tilt alike --- vanishes as
+$O(T^{-1/2})$.
+
 \subsection{Instantiations}\label{sec:instantiations}
 The framework specializes with no per-scheme work.
 \emph{Gumbel/Aaronson} (our flagship, \S\ref{sec:experiments}): candidate $i$
@@ -1004,6 +1011,14 @@ change the reward--watermark anticorrelation of the text itself (selection still
 prefers weakly watermarked candidates; $z$ retained $79$--$95\%$ across heads),
 which is an orthogonal, entropy-driven phenomenon. Intra-sequence key reuse
 \citep{keycollision2024} is likewise orthogonal and composable with our fix.
+
+The tilt, finally, is removable in principle: the exponential race that
+drives keyed samplers has a time coordinate (the winning arrival time) that
+is exactly independent of the emitted token, so a verifier with model access
+can read the watermark from a statistic whose law reward selection provably
+cannot shift. We do not pursue this here: it requires the generating model,
+the prompt, and repeated-context masking at verification, and the cost it
+recovers is already $O(1)$ per sequence and vanishing per token.
 
 \section{Limitations}
 Key-dependent selectors are outside the guarantee (and demonstrably break
