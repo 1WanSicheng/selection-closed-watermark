@@ -971,6 +971,19 @@ detector unchanged}: KGW's detector reads only the greenlist, which stays on
 the base key, so this family pays no union cost at all. Numbers in
 Appendix~\ref{app:kgw}.
 
+\textbf{Reasoning-side evaluation (GSM8K).}
+The same failure and repair appear on the \emph{accuracy} axis of test-time
+scaling: under the shared key, pass@16 and self-consistency collapse to the
+single-sample level (a loss of $39$ and $27$ accuracy points respectively),
+candidate separation restores both to the unwatermarked level, and the
+softened workaround shows a statistically significant single-sample accuracy
+tax that the reward axis does not expose. Detection on this short,
+low-entropy domain is weaker for \emph{every} scheme, and the verification
+tier matters: a provider who retains the selected index pays no multiplicity
+cost, while index-blind verification pays the needle-in-a-haystack fee of
+\S\ref{sec:detection}. Full table and discussion in
+Appendix~\ref{app:gsm}.
+
 \textbf{Candidate diversity.}
 Within-prompt statistics confirm closure at the sample level: the subkey arm is
 statistically indistinguishable from unwatermarked sampling
@@ -1031,9 +1044,13 @@ Proposition~\ref{prop:itcost}(i) the computational tier is forced for any
 compact-key design --- statistical closure would require stored key material
 comparable to the content entropy. Union detection scales linearly in the
 number of candidate subkeys, and the verifier must know $N$ or an upper bound.
-The study focuses on deterministic keyed decoder families; our largest
-evaluation uses one instruction-tuned generator, one reward model, and one
-prompt distribution, with a second decoder family as a replication.
+The study focuses on deterministic keyed decoder families; the main
+evaluation uses one generator family (instruction-tuned and base variants),
+one reward model, and one prompt distribution, with a second decoder family,
+a biased-logit family, and a mathematical-reasoning benchmark
+(Appendix~\ref{app:gsm}) as replications. Detection on short, low-entropy
+domains is weak for every scheme we test, and index-blind verification
+compounds this with the multiplicity fee.
 
 \section{Conclusion}
 Distortion-free watermarking is usually defined for one generation, while
@@ -1784,6 +1801,85 @@ KGW, derandomized, per-candidate streams & $0.0655$ & $0.0840$ & $16.0$ & $6.55$
 \end{tabular}
 \end{center}
 \end{table}
+
+\subsection{Reasoning-side evaluation: GSM8K}\label{app:gsm}
+We repeat the design on mathematical reasoning, where test-time scaling is
+measured in accuracy rather than reward: GSM8K \citep{cobbe2021gsm8k}, first
+$128$ test problems, LLaMA-3.1-8B-Instruct, raw $4$-shot prompts, $N{=}16$
+candidates (temperature $1.0$, top-$p$ $0.95$, $288$ tokens, truncated at
+the next exemplar boundary). Selection heads are reasoning-native and
+key-independent: pass@$1$ (mean over candidates), pass@$16$ (any candidate
+correct --- an oracle verifier), and self-consistency majority voting over
+extracted final answers \citep{wang2023selfconsistency}. Detection uses
+each arm's own detector with thresholds at the $0.01$ quantile of $2048$
+unwatermarked GSM8K generations; for the candidate-separated arm we report
+two verification tiers: \emph{index-known} (the provider retains the
+selected candidate's index, so a single-key test suffices) and
+\emph{index-blind} (union over the $16$ subkeys). The last column is a
+\emph{key-less} observer: AUROC of candidate log-perplexity against
+unwatermarked text ($0.5$ = invisible), the empirical face of the
+distortion-freeness certificate.
+
+\begin{table}[h]
+\caption{GSM8K: test-time scaling accuracy and watermark visibility
+(``sel.''\ = the majority-vote winner, i.e., the released answer). The
+shared key forfeits the entire scaling gain; candidate separation restores
+it; the index-known tier detects at the shared-key level while the
+index-blind tier pays the multiplicity fee, which is material at this
+domain's weak per-text signal ($z\approx3$). Key-less visibility: both
+strict arms are at chance (the certificate, measured); KGW's distribution
+shift is visible ($0.599$) to an observer with no key at all. The shared
+arm's low median perplexity reflects a single key realization over $128$
+effectively distinct texts.}
+\label{tab:gsm}
+\begin{center}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lccccccc}
+\toprule
+Arm & pass@1 & pass@16 & maj@16 & $z$ (single$\to$sel.) & TPR@$.01$ (single$\to$sel.) & med.\ PPL & AUROC$_{\mathrm{PPL}}$ \\
+\midrule
+Unwatermarked & .549 & .938 & .820 & --- & --- & 8.54 & (.500) \\
+Gumbel, shared key & .547 & .547 & .547 & $3.27\to3.27$ & $.703\to.703$ & 7.44 & .460 \\
+Cand.-separated, index-known & .529 & .938 & .805 & $3.85\to3.31$ & $.679\to.667$ & 8.44 & .487 \\
+Cand.-separated, union & .529 & .938 & .805 & $3.88\to3.44$ & $.523\to.421$ & 8.44 & .487 \\
+Gumbel, softened & .507 & .945 & .805 & $3.10\to2.99$ & $.674\to.703$ & 8.74 & .512 \\
+KGW ($\delta{=}2$) & .438 & .906 & .750 & $3.41\to2.81$ & $.640\to.555$ & 10.54 & .599 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+Findings. (1) \emph{Collapse on the accuracy axis}: the shared key loses
+$39.1$ points of pass@16 (paired CI $[-47.7,-30.5]$) and $27.3$ points of
+self-consistency accuracy --- all sixteen votes are the same answer.
+Candidate separation restores both to the unwatermarked level (all paired
+differences contain zero); the maj@$k$ curve rises from $.53$ to $.80$ for
+the unwatermarked, candidate-separated, and softened arms alike, and stays
+flat at $.547$ for the shared key.
+(2) \emph{The softened workaround taxes every sample}: its pass@1 is
+$4.2$ points below unwatermarked (CI $[-7.2,-1.2]$), a significant
+distortion cost that the reward axis of Table~\ref{tab:main} does not
+resolve; pool-level metrics mask it at $N{=}16$. KGW's marginal distortion
+costs $11.0$ points of pass@1, and majority voting does not fully compensate
+($-7.0$ points at maj@16, CI $[-12.5,-1.6]$): voting cannot undo a bias that
+afflicts every vote.
+(3) \emph{Detection on short, low-entropy reasoning chains is weak for
+every scheme} (median $z\approx3$ against $\approx8$ on the dialogue
+domain): chain-of-thought text carries few high-entropy positions. At this
+signal level the multiplicity fee of index-blind verification is material
+(thresholds $2.71$ vs.\ $3.71$; TPR $.667\to.421$ on the released answer),
+matching the $\ln N/z$ penalty of Theorem~\ref{thm:vanish}(iii); a
+provider who logs the selected index --- available for free in any BoN
+pipeline, and recoverable as the union detector's argmax --- pays none of
+it. The selection tilt appears here too:
+$\mathrm{corr}(\text{correct},z)\approx-0.22$, correct solutions being
+more model-typical.
+(4) \emph{The certificate, measured}: a key-less observer equipped with the
+model separates strict watermarked text from unwatermarked at AUROC
+$.487$/$.460$ (chance), while the key holder detects at $.667$; KGW leaks
+nearly as much to the public ($.599$) as its own detector yields at the
+$1\%$ operating point ($.555$).
 
 \subsection{Uncertainty quantification}\label{app:ci}
 All confidence intervals are $95\%$ paired-bootstrap intervals over the $128$

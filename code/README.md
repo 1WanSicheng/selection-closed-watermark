@@ -40,6 +40,7 @@ pulled outputs: `mtx16/{unwm_kgw,gumbel,unwm_gumbel}_scored.jsonl`,
 | `analysis/suite_table.py` | Table 2 (full metric suite) + matched-FPR table |
 | `analysis/bootstrap_ci.py` | Appendix CI table — paired bootstrap (10k resamples, same prompt indices across arms) for rewards, median z, differences, gain-retained |
 | `analysis/heads_matrix.py` | Appendix selection-head matrix (Tables: instruct + base) — single/BoN/SBoN/BoP/BoL, exact softmax + order-statistics computation |
+| `gsm_gen.py`, `analysis/gsm_analysis.py`, `analysis/gsm_ik_analysis.py` | GSM8K reasoning experiment (Appendix table): 5 arms, pass@k/self-consistency, two verification tiers, logPPL key-less column |
 | `run_matrix_base.sh`, `run_matrix_base2.sh` | base-model (Llama-3.1-8B) 7-arm pipeline: gen → reward → detection incl. 5 null calibrations |
 
 ## Repro map
